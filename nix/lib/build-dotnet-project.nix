@@ -257,19 +257,25 @@ let
     ${lib.optionalString (lock.workloads != [ ]) ''
       dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
         --source ${packageFolder}
-      autoPatchelf "$HOME/.dotnet/packs"
+      ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}
     ''}
+  ''
+  + lib.optionalString stdenv.hostPlatform.isDarwin ''
+    # The compilers record the paths of the sources and of the PDB in the
+    # assemblies they build. Linux builds run in /build, and darwin builds
+    # in a directory new for every build, so the paths are mapped to /build
+    # and a rebuild gives the same files. MSBuild reads PathMap as the
+    # compilers' path map.
+    export PathMap="$NIX_BUILD_TOP=/build"
   '';
 
   # A workload install puts its packs under $HOME/.dotnet, and the native
-  # tools among them, such as Emscripten's clang and Node.js, run once
-  # patched. Emscripten runs on the system's Python on Linux.
+  # tools among them, such as Emscripten's clang and Node.js, run on Linux
+  # once patched; darwin runs them as they come, and patchelf reads only
+  # ELF files. Emscripten runs on the system's Python on Linux.
   workloadInputs = lib.optionalAttrs (lock.workloads != [ ]) {
-    nativeBuildInputs = [
-      autoPatchelfHook
-      python3
-    ];
-    buildInputs = [
+    nativeBuildInputs = lib.optional stdenv.hostPlatform.isLinux autoPatchelfHook ++ [ python3 ];
+    buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
       stdenv.cc.cc.lib
       zlib
     ];

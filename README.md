@@ -247,11 +247,11 @@ The lock records packages from these sources, each by URL and hash:
 - **MSBuild SDK packages**, such as `Microsoft.Build.NoTargets`.
 - **Local tools** of `.config/dotnet-tools.json`, which a build may run.
 - **Runtime, host and targeting packs.** The lock takes them from NuGet,
-  so one lock serves both x86_64-linux and aarch64-linux.
+  so one lock serves x86_64-linux, aarch64-linux and aarch64-darwin.
 - **SDK workloads**, such as `wasm-tools`. The lock records their packs for
-  both machines, and a Nix build installs them offline.
+  every machine, and a Nix build installs them offline.
 - **The folder feed inside the SDK** (`library-packs`). The lock takes
-  these packages from a feed when a feed serves them, so both machines get
+  these packages from a feed when a feed serves them, so every machine gets
   the same file.
 - **The lock mode of NuGet.** When a `packages.lock.json` records a package
   with the hash of its file, the lockfile reads the hash from it. NuGet
@@ -269,7 +269,8 @@ A lock run stops, naming the reason, on these:
   the Android SDK and a JDK, which it finds on the machine; a build would
   have to provide them through `nativeBuildInputs`. The iOS, macOS and MAUI
   workloads need Xcode and build only on macOS.
-- **Windows and macOS target frameworks.** The purifier targets Linux.
+- **Windows and macOS target frameworks.** They need their platform's SDK,
+  which no Nix build has.
 
 Other limits: a lock is made with the nixpkgs SDK of the major version
 `global.json` names (10 when there is none), and a Nix build uses the SDK of

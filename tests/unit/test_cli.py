@@ -52,7 +52,8 @@ class WorkloadPacks(unittest.TestCase):
               "packs": {
                 "Plain": { "kind": "sdk", "version": "1.0.0" },
                 "PerHost": { "kind": "sdk", "version": "2.0.0",
-                  "alias-to": { "linux-x64": "PerHost.linux-x64", "linux-arm64": "PerHost.linux-arm64" } },
+                  "alias-to": { "linux-x64": "PerHost.linux-x64", "linux-arm64": "PerHost.linux-arm64",
+                    "osx-arm64": "PerHost.osx-arm64" } },
                 "Any": { "kind": "sdk", "version": "3.0.0", "alias-to": { "any": "Any.Real" } },
                 "WindowsOnly": { "kind": "sdk", "version": "4.0.0", "alias-to": { "win-x64": "W.win-x64" } },
               },
@@ -70,6 +71,7 @@ class WorkloadPacks(unittest.TestCase):
                 ("any.real", "3.0.0", None),
                 ("perhost.linux-arm64", "2.0.0", ["aarch64-linux"]),
                 ("perhost.linux-x64", "2.0.0", ["x86_64-linux"]),
+                ("perhost.osx-arm64", "2.0.0", ["aarch64-darwin"]),
                 ("plain", "1.0.0", None),
             ],
         )

@@ -114,11 +114,11 @@ NO_APPHOST = "-p:UseAppHost=false"
 # Crossgen2 compiler of ReadyToRun builds; the lock run restores each
 # project once more for each of these machines, so the lock holds their
 # packs too.
-BUILD_HOSTS = ["linux-x64", "linux-arm64"]
+BUILD_HOSTS = ["linux-x64", "linux-arm64", "osx-arm64"]
 
 # The Nix system of each machine of BUILD_HOSTS, for the `systems` of a
 # download entry that only one machine needs.
-HOST_SYSTEMS = {"linux-x64": "x86_64-linux", "linux-arm64": "aarch64-linux"}
+HOST_SYSTEMS = {"linux-x64": "x86_64-linux", "linux-arm64": "aarch64-linux", "osx-arm64": "aarch64-darwin"}
 
 # The lock run builds in one MSBuild process. Worker nodes talk over pipes
 # that MSBuild puts in /tmp on Unix, which not every machine that locks
@@ -1078,6 +1078,14 @@ def path_option(args, flag, variable):
 
 def main():
     global LOCK_OVERRIDE, TOOL_LOCK_OVERRIDE
+    # On macOS, Nix unsets TMPDIR when it lies in /var/folders, where macOS
+    # puts every user's, so this command has none when `nix run` or
+    # `nix shell` starts it. Without TMPDIR the .NET runtime of macOS
+    # cannot create a named mutex, and the SDK fails before it runs a
+    # command, so every dotnet gets the directory Python's temporary files
+    # use.
+    if sys.platform == "darwin":
+        os.environ.setdefault("TMPDIR", tempfile.gettempdir())
     args = sys.argv[1:]
     LOCK_OVERRIDE = path_option(args, "--lockfile", "DOTNET_PURIFIER_LOCKFILE")
     TOOL_LOCK_OVERRIDE = path_option(args, "--tool-lockfile", "DOTNET_PURIFIER_TOOL_LOCKFILE")

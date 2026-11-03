@@ -57,6 +57,15 @@
       ]
     },
     {
+      "path": "microsoft.net.runtime.emscripten.3.1.56.cache.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.cache.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.runtime.emscripten.3.1.56.cache.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.cache.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-jZtuh20p+Uq8LB3TPWKBAOsbSVut3ywWcjJIEs2VGTnrcSVDj5bWigjEVb/bLEcXPXDnTJ3WeZWUOn/SlX7uIQ==",
+      "systems": [
+        "aarch64-darwin"
+      ]
+    },
+    {
       "path": "microsoft.net.runtime.emscripten.3.1.56.node.linux-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.node.linux-arm64.10.0.14.nupkg",
       "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.runtime.emscripten.3.1.56.node.linux-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.node.linux-arm64.10.0.14.nupkg",
       "mirrors": [],
@@ -75,6 +84,24 @@
       ]
     },
     {
+      "path": "microsoft.net.runtime.emscripten.3.1.56.node.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.node.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.runtime.emscripten.3.1.56.node.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.node.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-MgnGnLTp19hMwEE06eO5JLtpBf34/r/7SoBjl4lSkS/+JdJ6X8hOF6K/AkhZeOynI/b+xC5kUEOEiAe1e2w7MA==",
+      "systems": [
+        "aarch64-darwin"
+      ]
+    },
+    {
+      "path": "microsoft.net.runtime.emscripten.3.1.56.python.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.python.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.runtime.emscripten.3.1.56.python.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.python.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-EYfPzryCHtOgIE4J/DI51X08Y6gnsbm4qausxh5aWOIcDMsh0HFkrAEX0eJ8q3+yq+0qFYGHpRmE7XULUMEMJA==",
+      "systems": [
+        "aarch64-darwin"
+      ]
+    },
+    {
       "path": "microsoft.net.runtime.emscripten.3.1.56.sdk.linux-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.sdk.linux-arm64.10.0.14.nupkg",
       "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.runtime.emscripten.3.1.56.sdk.linux-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.sdk.linux-arm64.10.0.14.nupkg",
       "mirrors": [],
@@ -90,6 +117,15 @@
       "hash": "sha512-GIJULLQRYirE2xEUtM5KZZq57aN5boHiYnufVbo3728QVFsjxtMf0pX+8tPOMgKaoob3ejgXKc642+HjsW/iUA==",
       "systems": [
         "x86_64-linux"
+      ]
+    },
+    {
+      "path": "microsoft.net.runtime.emscripten.3.1.56.sdk.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.sdk.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.runtime.emscripten.3.1.56.sdk.osx-arm64/10.0.14/microsoft.net.runtime.emscripten.3.1.56.sdk.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-wxpQMnauQazVNaoZzCaoUsQXleLIybzkKaCMNfYSrzwlUTvSlpzKZO4AEZfd1R9jDDOaxSFIxDbbr4bH4yfVFA==",
+      "systems": [
+        "aarch64-darwin"
       ]
     },
     {
@@ -135,6 +171,15 @@
       ]
     },
     {
+      "path": "microsoft.netcore.app.runtime.aot.osx-arm64.cross.browser-wasm/10.0.14/microsoft.netcore.app.runtime.aot.osx-arm64.cross.browser-wasm.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.aot.osx-arm64.cross.browser-wasm/10.0.14/microsoft.netcore.app.runtime.aot.osx-arm64.cross.browser-wasm.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-/o75B6lL3Hkj4HDrNfAMoWjYhAw7zzsSAFTd5CP6m82/au162HwYpLzfQmDBfxbMggvW6m7pm5r8PfZv8ntXQw==",
+      "systems": [
+        "aarch64-darwin"
+      ]
+    },
+    {
       "path": "microsoft.netcore.app.runtime.mono.browser-wasm/10.0.14/microsoft.netcore.app.runtime.mono.browser-wasm.10.0.14.nupkg",
       "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.mono.browser-wasm/10.0.14/microsoft.netcore.app.runtime.mono.browser-wasm.10.0.14.nupkg",
       "mirrors": [],
@@ -143,5 +188,5 @@
   ],
   "localPackages": [],
   "sdkPackages": [],
-  "contentHash": "sha256-S4gnD/ZCP7qND/EOpXOwhvRLSs+7btyL9g64nbd839A="
+  "contentHash": "sha256-JdUHQuL4duHlauTxkUL/VAWBc3vdmYl5TcUGvwOcPc4="
 }
