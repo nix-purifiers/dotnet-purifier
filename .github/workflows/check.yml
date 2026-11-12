@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
-        fixture: [multi, sources, workloads, update, native42, native43, real-world/fluentvalidation]
+        fixture: [multi, sources, workloads, update, native42, native43, native-multi, real-world/fluentvalidation]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -87,7 +87,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: |
           system="$(nix eval --raw --impure --expr builtins.currentSystem)"
-          for check in multi-app multi-greeter sources-web native-ffi; do
+          for check in multi-app multi-greeter sources-web browser-projections native-ffi native-multi; do
             nix build --no-link -L ".#checks.$system.$check"
             nix build --no-link --rebuild ".#checks.$system.$check"
           done

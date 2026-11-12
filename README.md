@@ -364,3 +364,49 @@ stubs. Keep libraries loaded for process lifetime: unloading is unsupported.
 The checks exercise independent source revisions, a captured NuGet library,
 managed allocation and garbage collection, C/C++ callers, ctypes/CFFI, and
 Java FFM through the published Java library path.
+
+### Browser WebAssembly resources
+
+Select captured browser projects explicitly when building:
+
+```nix
+(buildDotnetProject {
+  src = ./my-project;
+  browserTargets.MyBrowserApp.webjar = {
+    groupId = "org.example";
+    artifactId = "my-browser-app";
+    version = "1.0.0";
+  };
+}).projections.MyBrowserApp
+```
+
+The result provides `web`, `resources`, and `java-resources` views of the
+complete native `dotnet publish` `wwwroot` tree, preserving the loader,
+managed WebAssembly assemblies, runtime, native relinked modules, compressed
+variants, and their relative paths. `web.documentRoot` is the serving root;
+`java-resources.classPath` is its resource JAR. Optional `webjar` coordinates
+also provide `maven` and `ivy` repositories. Use an empty target set value
+(`browserTargets.MyBrowserApp = { };`) for resource views alone.
+
+Only captured `browser-*` executable projects qualify. WASI executables and
+managed desktop executables do not expose this browser projection. The
+projection preserves the application's own published assets; it does not
+supply an HTML entrypoint or rewrite boot manifests. The existing raw
+`packages` outputs remain available. Explicit `dotnet-sdk` selection applies
+to the producer of every view.
+
+Sandboxed WebAssembly publish also supplies `SOURCE_DATE_EPOCH` to native
+MSBuild static-asset endpoint generation. This makes the generated HTTP
+`Last-Modified` headers reproducible. The native task serializes its own
+manifest; published manifests and browser asset bodies are not rewritten.
+Existing environment-selected common targets are imported first, and explicit
+project overrides of `CustomAfterMicrosoftCommonTargets` retain precedence.
+
+Capture and sandboxed workload builds use a private SDK home. When the
+project does not declare `sdk.workloadVersion` in `global.json`, SDKs that
+support workload sets are configured through their native CLI to use bundled
+manifests. This keeps capture consistent with the manifests used by the pure
+builder, even when newer workload sets appear on the feed. The capability is
+detected from the selected SDK, without a runtime-version allowlist. Explicit
+project workload-set declarations retain precedence; capturing their separate
+downloaded manifest set remains an open integration case.

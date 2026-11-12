@@ -84,6 +84,9 @@
   # Tools the build needs beyond the SDK.
   nativeBuildInputs ? [ ],
   nativeProducts ? { },
+
+  # Explicit browser-wasm project names and optional WebJar coordinates.
+  browserTargets ? { },
   # Libraries the build links against.
   buildInputs ? [ ],
   # Fetchers for the purifier library's fetchEntry and tree, such as a
@@ -257,6 +260,7 @@ let
     cp -rs --no-preserve=mode ${packageFolder}/. "$NUGET_PACKAGES"
     ${lib.optionalString lock.tools "dotnet tool restore --configfile ${toolConfig}"}
     ${lib.optionalString (lock.workloads != [ ]) ''
+      python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
       dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
         --source ${packageFolder}
       ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}
@@ -409,6 +413,10 @@ let
       installPhase = ''
         runHook preInstall
         ${dotnetSetup}
+        # Preserve upstream custom common targets before adding the native
+        # SOURCE_DATE_EPOCH input metadata hook. Project overrides still win.
+        export PurifierOriginalAfterCommonTargets="''${CustomAfterMicrosoftCommonTargets:-}"
+        export CustomAfterMicrosoftCommonTargets=${./browser-timestamps.targets}
         ${publish p [ ]}
         runHook postInstall
       '';
@@ -628,8 +636,24 @@ let
       };
     }
   ) nativePackages;
+
+  browserProjections = import ./browser-projections.nix {
+    inherit
+      lib
+      purifier
+      runCommand
+      python3
+      ;
+    inherit packages;
+    projects = byName lock.projects;
+    targets = browserTargets;
+  };
   testProjects = lib.mapAttrs (_: mkTest) (ofKind [ "test" ]);
 in
+assert lib.assertMsg (
+  lib.intersectLists (builtins.attrNames nativeProjections) (builtins.attrNames browserProjections)
+  == [ ]
+) "dotnet-purifier: native product and browser target names must be distinct";
 {
   inherit
     packages
@@ -650,6 +674,6 @@ in
     name = "dotnet-purifier-release";
     paths = builtins.attrValues (lib.filterAttrs (_: p: p.kind == "package") packages);
   };
-  projections = nativeProjections;
+  projections = nativeProjections // browserProjections;
   fetches = lock.entries;
 }

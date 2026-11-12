@@ -686,6 +686,8 @@ def lock(args, evaluate=False):
         home = tmp / "home"
         home.mkdir()
         env = dotnet_env(home, dotnet)
+        workload_mode = os.environ.get("DOTNET_PURIFIER_WORKLOAD_MODE_HELPER", str(Path(__file__).resolve().parents[1] / "pkgs/dotnet-purifier/workload-mode.py"))
+        subprocess.run([sys.executable, workload_mode, dotnet], cwd=build, env=env, check=True)
 
         sdk_version = run(dotnet, ["--version"], build, env, capture=True).strip()
         info(f"locking with the .NET SDK {sdk_version}")
