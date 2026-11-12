@@ -14,11 +14,22 @@
   # The SDK major version for a build without a global.json.
   defaultSdk ? 10,
 }:
+let
+  runtime = lib.fileset.toSource {
+    root = ../..;
+    fileset = lib.fileset.unions [
+      ../../lib-overlays
+      ../../pkgs
+      ../../cli
+      ../../flake.lock
+    ];
+  };
+in
 writeShellApplication {
   name = "dotnet-purifier";
   text = ''
     export DOTNET_PURIFIER_WORKLOAD_MODE_HELPER=${./workload-mode.py}
-    export DOTNET_PURIFIER_NIX_LIB=${../../nix/lib}
+    export DOTNET_PURIFIER_NIX_LIB=${runtime}/pkgs/build-dotnet-project
     export DOTNET_PURIFIER_FLAKE=${../..}
     export DOTNET_PURIFIER_NIXPKGS=${path}
     export DOTNET_PURIFIER_SYSTEM=${stdenv.hostPlatform.system}

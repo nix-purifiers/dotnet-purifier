@@ -26,5 +26,5 @@ pkgs.runCommand "dotnet-native-negative-controls"
   ''
     mkdir "$out"
     python3 ${./native/compiler-input.py} ${../pkgs/dotnet-native-products/resolve-input.py} ${project.nativePackages.answer} ${changed.nativePackages.answer} "$out/compiler-input.json"
-    python3 ${./native/negative.py} ${../nix/lib/native/verify.py} ${project.nativePackages.answer} "$out/proof.json" ${changed.nativePackages.answer}
+    python3 ${./native/negative.py} ${../pkgs/dotnet-native-products/verify.py} ${project.nativePackages.answer} "$out/proof.json" ${changed.nativePackages.answer}
   ''

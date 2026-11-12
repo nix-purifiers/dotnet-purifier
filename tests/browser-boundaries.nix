@@ -8,7 +8,7 @@ let
   };
   evaluate =
     projects: targets:
-    builtins.deepSeq (import ../nix/lib/browser-projections.nix {
+    builtins.deepSeq (import ../pkgs/build-dotnet-project/browser-projections.nix {
       inherit (pkgs) lib runCommand python3;
       purifier = core;
       inherit projects targets;

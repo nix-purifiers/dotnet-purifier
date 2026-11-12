@@ -105,7 +105,7 @@ let
   # The lock in memory (lock.nix), which checkLock of the purifier library
   # fails with its problems, each naming the command that fixes it.
   lock = purifier.checkLock (
-    import ./lock.nix {
+    import ../../lib-overlays/default/lock.nix {
       inherit
         lib
         lockFile
@@ -529,7 +529,7 @@ let
     "package"
     "library"
   ]);
-  nativeInspector = import ./native/inspector.nix {
+  nativeInspector = import ../dotnet-native-products/inspector.nix {
     inherit runCommand sdk;
     globalJson =
       if builtins.pathExists "${filteredSrc}/global.json" then "${filteredSrc}/global.json" else null;
@@ -597,7 +597,7 @@ let
         runHook preInstall
         ${dotnetSetup}
         hostRid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
-        compilerPackages=$(python3 ${./native/prepare-tools.py} "$NUGET_PACKAGES" "$hostRid")
+        compilerPackages=$(python3 ${../dotnet-native-products/prepare-tools.py} "$NUGET_PACKAGES" "$hostRid")
         ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$compilerPackages"''}
         rid=${lib.escapeShellArg p.nativePublish.runtimeIdentifier}
         ${lib.optionalString (p.nativePublish.runtimeIdentifierSource == "sdk-host") ''
@@ -607,9 +607,9 @@ let
           ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"
         assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" -p:TargetFramework=${lib.escapeShellArg framework} \
           ${lib.escapeShellArgs buildProperties} -getProperty:TargetPath)
-        input=$(python3 ${../../pkgs/dotnet-native-products/resolve-input.py} "$assembly" ${lib.escapeShellArg framework} "$TMPDIR/compiler-input.json")
+        input=$(python3 ${../dotnet-native-products/resolve-input.py} "$assembly" ${lib.escapeShellArg framework} "$TMPDIR/compiler-input.json")
         ${lib.getExe' sdk "dotnet"} ${nativeInspector}/Inspect.dll "$input" "$TMPDIR/managed-exports.json"
-        python3 ${./native/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$input"
+        python3 ${../dotnet-native-products/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$input"
         cp "$TMPDIR/compiler-input.json" "$out/native-proof/compiler-input.json"
         cp "$assembly" "$out/native-proof/build-target.dll"
         runHook postInstall
