@@ -87,7 +87,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: |
           system="$(nix eval --raw --impure --expr builtins.currentSystem)"
-          for check in multi-app multi-greeter sources-web; do
+          for check in multi-app multi-greeter sources-web browser-projections; do
             nix build --no-link -L ".#checks.$system.$check"
             nix build --no-link --rebuild ".#checks.$system.$check"
           done

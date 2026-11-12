@@ -176,6 +176,7 @@ in
       {
         nativeBuildInputs = [ pkgs.python3 ];
         DOTNET_PURIFIER_CLI = ../cli/dotnet_purifier.py;
+        DOTNET_PURIFIER_WORKLOAD_MODE_HELPER = ../pkgs/dotnet-purifier/workload-mode.py;
       }
       ''
         python3 -m unittest discover -s ${./unit} -v
@@ -273,6 +274,8 @@ in
     sources.packages.Web.artifacts."bin/web"
   } --describe" "application: web";
 
+  browser-boundaries = import ./browser-boundaries.nix { inherit pkgs; };
+  browser-projections = import ./browser.nix { inherit pkgs build; };
   workloads-wasm = workloads.packages.Wasm;
 
   # The workload's Emscripten relinked the native runtime: the build
