@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: MIT
 { dotnetCorePackages }:
 let
-  released = dotnetCorePackages.buildDotnetSdk ./dotnet11.nix;
+  released =
+    (dotnetCorePackages.buildDotnetSdk ./dotnet11.nix)
+    // (dotnetCorePackages.buildDotnetSdk ./dotnet10-runtime.nix);
   # The binary SDK needs the user-local workload marker so workload
   # metadata is written under the isolated HOME, outside the Nix store.
   sdk = released.sdk_11_0.unwrapped.overrideAttrs (old: {

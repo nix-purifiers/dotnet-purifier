@@ -223,10 +223,10 @@ in
   current-app11 = current.packages.App11;
   current-app-runs =
     prints "current-app-runs" "${current.packages.App}/bin/App"
-      ''{"runtime":10,"value":"locked"}'';
+      ''{"runtime":"10.0.15","value":"locked"}'';
   current-app11-runs =
     prints "current-app11-runs" "${current.packages.App11}/bin/App11"
-      ''{"runtime":11,"value":"locked"}'';
+      ''{"runtime":"11.0.0","value":"locked"}'';
 
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;

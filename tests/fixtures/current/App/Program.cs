@@ -1,1 +1,1 @@
-System.Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(new { runtime = System.Environment.Version.Major, value = "locked" }));
+System.Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(new { runtime = System.Environment.Version.ToString(), value = "locked" }));

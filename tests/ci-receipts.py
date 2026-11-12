@@ -36,6 +36,7 @@ versions = json.loads(run('sdk-versions.json', 'nix', 'eval', '--json', '--impur
     'runtime9 = p.dotnetCorePackages.runtime_9_0.version; '
     'runtime10 = p.dotnetCorePackages.runtime_10_0.version; '
     'sdk11 = (p.dotnetCorePackages.buildDotnetSdk ' + str(root / 'tests/toolchains/dotnet11.nix') + ').sdk_11_0.version; '
+    'currentRuntime10 = (p.dotnetCorePackages.buildDotnetSdk ' + str(root / 'tests/toolchains/dotnet10-runtime.nix') + ').runtime_10_0.version; '
     'runtime11 = (p.dotnetCorePackages.buildDotnetSdk ' + str(root / 'tests/toolchains/dotnet11.nix') + ').runtime_11_0.version; })'))
 checks = ['current-app-runs', 'current-app11-runs', 'unit-tests', 'multi-app-runs', 'multi-tests', 'multi-release-publishes',
           'sources-web-runs', 'workloads-wasm-relinked',
