@@ -26,7 +26,7 @@ jobs:
           sandbox=true
           # Nixpkgs' binary .NET SDKs declare macOS system-service profiles.
           if [ "$RUNNER_OS" = macOS ]; then sandbox=relaxed; fi
-          nix flake check -L --max-jobs 2 --option sandbox "$sandbox"
+          nix flake check -L --keep-going --max-jobs 2 --option sandbox "$sandbox"
       - name: Retain native execution receipts
         run: python3 tests/ci-receipts.py "$RUNNER_TEMP/receipts"
       - uses: actions/upload-artifact@v4

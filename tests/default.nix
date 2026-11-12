@@ -48,9 +48,6 @@ let
   diagnoseTest = import ./test-diagnostics.nix { inherit lib; };
   multiTestProjects = lib.mapAttrs (_: diagnoseTest) multi.tests.projects;
   fluentvalidationTestProjects = lib.mapAttrs (_: diagnoseTest) fluentvalidation.tests.projects;
-  testSuite =
-    name: projects:
-    pkgs.linkFarm name (lib.mapAttrsToList (name: path: { inherit name path; }) projects);
 
   # Released .NET 11, independent of the RC in the primary package set.
   # Exercise the public builder's toolchain override on maintained TFMs.
@@ -238,11 +235,11 @@ in
 
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;
-  multi-tests = testSuite "multi-tests" multiTestProjects;
+  multi-tests = multi.tests;
   multi-tests-native = multiTestProjects."Greeter.Tests";
   test-network-boundary = import ./test-network.nix {
     inherit pkgs;
-    testProject = multiTestProjects."Greeter.Tests";
+    testProject = multi.tests.projects."Greeter.Tests";
   };
 
   # The executable runs on the .NET runtime and reaches both its project
@@ -320,7 +317,7 @@ in
   realworld-fluentvalidation = fluentvalidation.release;
   realworld-fluentvalidation-benchmarks =
     fluentvalidation.packages."FluentValidation.Tests.Benchmarks";
-  realworld-fluentvalidation-tests = testSuite "fluentvalidation-tests" fluentvalidationTestProjects;
+  realworld-fluentvalidation-tests = fluentvalidation.tests;
   realworld-fluentvalidation-tests-native = fluentvalidationTestProjects."FluentValidation.Tests";
 }
 // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
