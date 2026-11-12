@@ -42,7 +42,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
-        fixture: [multi, sources, workloads, update, real-world/fluentvalidation]
+        fixture: [multi, sources, workloads, update, current, real-world/fluentvalidation]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -69,7 +69,17 @@ jobs:
           if [ "${{ matrix.fixture }}" = multi ]; then
             rm src/App/packages.lock.json
           fi
-          nix run "$GITHUB_WORKSPACE#default" -- lock --force --lockfile "$lockfile"
+          if [ "${{ matrix.fixture }}" = current ]; then
+            export DOTNET_PURIFIER_NIXPKGS="$GITHUB_WORKSPACE/tests/toolchains"
+            DOTNET_PURIFIER_SYSTEM="$(nix eval --raw --impure --expr builtins.currentSystem)"
+            export DOTNET_PURIFIER_SYSTEM
+            export DOTNET_PURIFIER_DEFAULT_SDK=11
+            export DOTNET_PURIFIER_NIX_LIB="$GITHUB_WORKSPACE/nix/lib"
+            export DOTNET_PURIFIER_FLAKE="$GITHUB_WORKSPACE"
+            python3 "$GITHUB_WORKSPACE/cli/dotnet_purifier.py" lock --force --lockfile "$lockfile"
+          else
+            nix run "$GITHUB_WORKSPACE#default" -- lock --force --lockfile "$lockfile"
+          fi
       - name: The lockfile is unchanged
         run: git diff --exit-code -- tests
       # With --tool-lockfile, a lock into a directory that does not exist
@@ -147,7 +157,10 @@ jobs:
           nix build --out-link "$RUNNER_TEMP/cli" "$GITHUB_WORKSPACE#default"
           cli="$RUNNER_TEMP/cli/bin/dotnet-purifier"
           "$cli" update
-          ! grep -q 'Version="12.0.3"' App/App.csproj
+          if grep -q 'Version="12.0.3"' App/App.csproj; then
+            echo "update retained Newtonsoft.Json 12.0.3" >&2
+            exit 1
+          fi
           cp dotnet-purifier.lock.json "$RUNNER_TEMP/updated.lock.json"
           "$cli" lock
           cmp dotnet-purifier.lock.json "$RUNNER_TEMP/updated.lock.json"

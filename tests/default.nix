@@ -44,6 +44,15 @@ let
     lockFile = ./real-world/fluentvalidation/dotnet-purifier.lock.json;
   };
 
+  # Released .NET 11, independent of the RC in the primary package set.
+  # Exercise the public builder's toolchain override on maintained TFMs.
+  currentToolchain = import ./toolchains/released.nix { inherit (pkgs) dotnetCorePackages; };
+  current =
+    (build.override {
+      dotnetCorePackages = pkgs.dotnetCorePackages // currentToolchain;
+    })
+      { src = ./fixtures/current; };
+
   # A lockfile changed by `changes`, with its content hash computed again,
   # so that it fails only for the change.
   multiLock = lib.importJSON ./fixtures/multi/dotnet-purifier.lock.json;
@@ -209,6 +218,15 @@ in
   # A build whose source holds no lockfile, from one kept outside it.
   conformance-external = external.packages.App;
   conformance-external-packages-lock = externalPackagesLock.packages.App;
+
+  current-app = current.packages.App;
+  current-app11 = current.packages.App11;
+  current-app-runs =
+    prints "current-app-runs" "${current.packages.App}/bin/App"
+      ''{"runtime":10,"value":"locked"}'';
+  current-app11-runs =
+    prints "current-app11-runs" "${current.packages.App11}/bin/App11"
+      ''{"runtime":11,"value":"locked"}'';
 
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;
