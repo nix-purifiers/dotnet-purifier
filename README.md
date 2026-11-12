@@ -410,3 +410,10 @@ builder, even when newer workload sets appear on the feed. The capability is
 detected from the selected SDK, without a runtime-version allowlist. Explicit
 project workload-set declarations retain precedence; capturing their separate
 downloaded manifest set remains an open integration case.
+
+A NativeAOT capture whose `runtimeIdentifierSource` is `sdk-host` retains the
+capture SDK’s observed host RID. Builds query the selected SDK for its current
+host RID. Capture conformance keeps both raw locks and their native SDK
+observations, validates their hashes through the Nix reader, and requires
+byte-identical repeated captures within each SDK profile. Cross-host captures
+can therefore retain different RIDs and content hashes.

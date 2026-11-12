@@ -62,7 +62,21 @@ jobs:
           fi
           nix run "$GITHUB_WORKSPACE#default" -- lock --force --lockfile "$lockfile"
       - name: The lockfile is unchanged
+        if: ${{ !startsWith(matrix.fixture, 'native') }}
         run: git diff --exit-code -- tests
+      - name: Verify the native SDK capture profile
+        if: startsWith(matrix.fixture, 'native')
+        run: |
+          python3 tests/native/relock-profile.py \
+            --repo "$GITHUB_WORKSPACE" --fixture "${{ matrix.fixture }}" \
+            --capture "$GITHUB_WORKSPACE/tests/fixtures/${{ matrix.fixture }}/dotnet-purifier.lock.json" \
+            --out "$RUNNER_TEMP/native-profile"
+      - uses: actions/upload-artifact@v4
+        if: always() && startsWith(matrix.fixture, 'native')
+        with:
+          name: native-capture-${{ matrix.runner }}-${{ matrix.fixture }}
+          path: ${{ runner.temp }}/native-profile
+          if-no-files-found: error
       # With --tool-lockfile, a lock into a directory that does not exist
       # yet starts from the packages.lock.json in the tree, writes it there,
       # and leaves the tree and the lockfile as they are.
