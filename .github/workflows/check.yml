@@ -39,6 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
+      - name: Select the optional packaged fixture SDK
+        run: bash tests/fixture-sdk.sh '${{ matrix.fixture }}'
       - name: Relock ${{ matrix.fixture }}
         run: |
           lockfile="$GITHUB_WORKSPACE/tests/fixtures/${{ matrix.fixture }}/dotnet-purifier.lock.json"
@@ -118,6 +120,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
+      - name: Select the optional packaged fixture SDK
+        run: bash tests/fixture-sdk.sh
       - name: Prefetch
         working-directory: tests/fixtures/multi
         run: |
@@ -147,6 +151,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
+      - name: Select the optional packaged fixture SDK
+        run: bash tests/fixture-sdk.sh
       - working-directory: tests/fixtures/update
         run: |
           nix build --out-link "$RUNNER_TEMP/cli" "$GITHUB_WORKSPACE#default"

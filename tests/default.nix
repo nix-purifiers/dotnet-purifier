@@ -177,6 +177,7 @@ in
         nativeBuildInputs = [ pkgs.python3 ];
         DOTNET_PURIFIER_CLI = ../cli/dotnet_purifier.py;
         DOTNET_PURIFIER_WORKLOAD_MODE_HELPER = ../pkgs/dotnet-purifier/workload-mode.py;
+        DOTNET_PURIFIER_NIX_LIB = ../pkgs/build-dotnet-project;
       }
       ''
         python3 -m unittest discover -s ${./unit} -v
