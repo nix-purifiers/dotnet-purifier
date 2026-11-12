@@ -63,6 +63,7 @@
   icu,
   openssl,
   zlib,
+  clang,
   krb5,
 }:
 {
@@ -82,6 +83,7 @@
   dotnet-sdk ? null,
   # Tools the build needs beyond the SDK.
   nativeBuildInputs ? [ ],
+  nativeProducts ? { },
   # Libraries the build links against.
   buildInputs ? [ ],
   # Fetchers for the purifier library's fetchEntry and tree, such as a
@@ -519,11 +521,110 @@ let
     "package"
     "library"
   ]);
+  nativeInspector = import ./native/inspector.nix { inherit runCommand sdk; };
+  nativePackages = lib.mapAttrs (
+    name: options:
+    let
+      p =
+        (byName lock.projects).${options.project or name}
+          or (throw "dotnet-purifier: unknown native project ${options.project or name}");
+      exports = options.exports or [ ];
+      library = "lib/lib${name}${stdenv.hostPlatform.extensions.sharedLibrary}";
+      framework = builtins.head p.targetFrameworks;
+    in
+    assert lib.assertMsg (
+      builtins.isAttrs options
+      &&
+        builtins.attrNames (
+          removeAttrs options [
+            "project"
+            "exports"
+          ]
+        ) == [ ]
+    ) "dotnet-purifier: native product accepts project and explicit exports only";
+    assert lib.assertMsg (
+      builtins.match "[A-Za-z_][A-Za-z0-9_]*" name != null
+    ) "dotnet-purifier: native product name must be a C identifier";
+    assert lib.assertMsg (p ? nativePublish && p.nativePublish.kind == "shared")
+      "dotnet-purifier: selected native project must have a captured NativeAOT shared publish; relock it";
+    assert lib.assertMsg (
+      exports != [ ] && builtins.all (x: builtins.isString x && x != "") exports
+    ) "dotnet-purifier: native products require explicit exported entrypoint names";
+    mkBuild p {
+      pname = "dotnet-native-${name}";
+      nativeBuildInputs = [
+        clang
+        python3
+      ]
+      ++ lib.optional stdenv.hostPlatform.isLinux autoPatchelfHook;
+      buildInputs = [
+        zlib
+        stdenv.cc.cc.lib
+      ];
+      runtimeDependencies = map lib.getLib runtimeLibraries;
+      dontAutoPatchelf = true;
+      dontPatchELF = true;
+      dontPatchShebangs = true;
+      postFixup = ''
+        ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$out/lib"''}
+        python3 - "$out" <<'PY'
+        import hashlib,json,pathlib,sys
+        out=pathlib.Path(sys.argv[1]);p=out/'native-products.json';m=json.loads(p.read_text())
+        m['packagedSha256']=hashlib.sha256((out/m['library']).read_bytes()).hexdigest()
+        m['relocated']=m['packagedSha256']!=m['nativeSha256']
+        p.write_text(json.dumps(m,indent=2,sort_keys=True)+'\n')
+        PY
+      '';
+      nativeSpec = builtins.toJSON {
+        inherit library exports;
+        assembly = p.assemblyName;
+        system = stdenv.hostPlatform.system;
+      };
+      passAsFile = [ "nativeSpec" ];
+      installPhase = ''
+        runHook preInstall
+        ${dotnetSetup}
+        hostRid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
+        compilerPackages=$(python3 ${./native/prepare-tools.py} "$NUGET_PACKAGES" "$hostRid")
+        ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$compilerPackages"''}
+        rid=${lib.escapeShellArg p.nativePublish.runtimeIdentifier}
+        ${lib.optionalString (p.nativePublish.runtimeIdentifierSource == "sdk-host") ''
+          rid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
+        ''}
+        dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
+          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"
+        assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" \
+          ${lib.escapeShellArgs buildProperties} -getProperty:TargetPath)
+        ${lib.getExe' sdk "dotnet"} ${nativeInspector}/Inspect.dll "$assembly" "$TMPDIR/managed-exports.json"
+        python3 ${./native/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$assembly"
+        runHook postInstall
+      '';
+    }
+  ) nativeProducts;
+  nativeProjections = lib.mapAttrs (
+    name: producer:
+    purifier.nativeProjections {
+      inherit producer runCommand python3;
+      system = stdenv.hostPlatform.system;
+      libraries.${name} = "lib/lib${name}${stdenv.hostPlatform.extensions.sharedLibrary}";
+      targetMetadata.${name} = {
+        abi = "c";
+        exports = nativeProducts.${name}.exports;
+        runtime = {
+          initialization = "native-loader";
+          lifetime = "process";
+          unload = false;
+        };
+        ownership = "native-proof/managed-exports.json";
+      };
+    }
+  ) nativePackages;
   testProjects = lib.mapAttrs (_: mkTest) (ofKind [ "test" ]);
 in
 {
   inherit
     packages
+    nativePackages
     dependencies
     packageFolder
     runtimeLibraries
@@ -540,5 +641,6 @@ in
     name = "dotnet-purifier-release";
     paths = builtins.attrValues (lib.filterAttrs (_: p: p.kind == "package") packages);
   };
+  projections = nativeProjections;
   fetches = lock.entries;
 }
