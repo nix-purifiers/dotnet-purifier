@@ -219,7 +219,7 @@ def definition_hash(root, targets):
     """The SRI SHA-256 of the build definition: of a text whose first line
     is the targets as JSON and whose other lines are each definition file's
     path and the hex SHA-256 of its content, separated by a tab.
-    nix/lib/definition.nix computes the same hash at evaluation time, so
+    lib-overlays/default/definition.nix computes the same hash at evaluation time, so
     a Nix build knows when the lock is stale."""
     lines = [json.dumps(targets, separators=(",", ":"), ensure_ascii=False)]
     for relative, path in definition_sources(root).items():
@@ -393,7 +393,7 @@ def describe(dotnet, root, project, env):
 
 def build_commands(project):
     """The dotnet commands that build a project, in the lock run and in the
-    Nix sandbox alike. nix/lib/build-dotnet-project.nix runs the same
+    Nix sandbox alike. pkgs/build-dotnet-project/default.nix runs the same
     commands for each kind."""
     path = project["path"]
     if project["kind"] == "exe":
@@ -814,7 +814,7 @@ def take_hashes_from_nuget_locks(entries, hashes):
 def content_hash(data):
     """The SRI SHA-256 of a lockfile's content without its contentHash, as
     JSON with sorted keys and no whitespace. That is the JSON Nix's
-    builtins.toJSON writes, so nix/lib/lock.nix checks the same hash."""
+    builtins.toJSON writes, so lib-overlays/default/lock.nix checks the same hash."""
     content = {k: v for k, v in data.items() if k != "contentHash"}
     text = json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return "sha256-" + base64.b64encode(hashlib.sha256(text.encode()).digest()).decode()

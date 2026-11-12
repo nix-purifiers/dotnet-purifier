@@ -102,7 +102,7 @@ let
   # The lock in memory (lock.nix), which checkLock of the purifier library
   # fails with its problems, each naming the command that fixes it.
   lock = purifier.checkLock (
-    import ./lock.nix {
+    import ../../lib-overlays/default/lock.nix {
       inherit
         lib
         lockFile

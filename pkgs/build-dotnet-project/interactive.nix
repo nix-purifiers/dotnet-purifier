@@ -19,7 +19,7 @@
   packagesLock,
 }:
 let
-  build = pkgs.callPackage ./build-dotnet-project.nix { inherit purifier; } {
+  build = pkgs.callPackage ./default.nix { inherit purifier; } {
     inherit src lockFile packagesLock;
   };
 in
