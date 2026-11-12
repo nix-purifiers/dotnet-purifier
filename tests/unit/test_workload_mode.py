@@ -21,6 +21,14 @@ class WorkloadSelection(unittest.TestCase):
                 self.assertEqual(mode.configure('/caller/sdk/bin/dotnet',root),'project-workload-set')
                 run.assert_not_called()
 
+    def test_commented_trailing_comma_preserves_explicit_workload_set(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'global.json').write_text('{"sdk":{"workloadVersion":"custom,}//kept", // project selection\n},}')
+            with patch.object(mode.subprocess,'run') as run:
+                self.assertEqual(mode.configure('/caller/sdk/bin/dotnet',root),'project-workload-set')
+                run.assert_not_called()
+
     def test_capability_selects_manifests_on_same_runtime(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(mode.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout='--update-mode <manifests|workload-set>')) as run:

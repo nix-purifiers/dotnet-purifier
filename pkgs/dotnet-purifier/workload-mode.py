@@ -12,13 +12,16 @@ import sys
 
 
 def manifest_json(text):
-    tokens=re.finditer(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/|,(?=\s*[\]}])',text,re.DOTALL)
-    kept=[];last=0
-    for token in tokens:
-        if not token.group().startswith('"'):
-            kept.append(text[last:token.start()]);last=token.end()
-    kept.append(text[last:])
-    return json.loads(''.join(kept))
+    # Preserve string tokens in both passes: removing a comment can expose
+    # a trailing comma which was not adjacent to its closing delimiter.
+    strings = r'"(?:\\.|[^"\\])*"'
+    text = re.sub(strings + r'|//[^\n]*|/\*.*?\*/',
+                  lambda match: match.group() if match.group().startswith('"') else '',
+                  text, flags=re.DOTALL)
+    text = re.sub(strings + r'|,(?=\s*[\]}])',
+                  lambda match: match.group() if match.group().startswith('"') else '',
+                  text, flags=re.DOTALL)
+    return json.loads(text)
 
 
 def configure(dotnet, root):
