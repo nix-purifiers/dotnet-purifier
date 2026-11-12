@@ -409,6 +409,10 @@ let
       installPhase = ''
         runHook preInstall
         ${dotnetSetup}
+        # Preserve upstream custom common targets before adding the native
+        # SOURCE_DATE_EPOCH input metadata hook. Project overrides still win.
+        export PurifierOriginalAfterCommonTargets="''${CustomAfterMicrosoftCommonTargets:-}"
+        export CustomAfterMicrosoftCommonTargets=${./browser-timestamps.targets}
         ${publish p [ ]}
         runHook postInstall
       '';

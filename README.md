@@ -350,3 +350,10 @@ projection preserves the application's own published assets; it does not
 supply an HTML entrypoint or rewrite boot manifests. The existing raw
 `packages` outputs remain available. Explicit `dotnet-sdk` selection applies
 to the producer of every view.
+
+Sandboxed WebAssembly publish also supplies `SOURCE_DATE_EPOCH` to native
+MSBuild static-asset endpoint generation. This makes the generated HTTP
+`Last-Modified` headers reproducible. The native task serializes its own
+manifest; published manifests and browser asset bodies are not rewritten.
+Existing environment-selected common targets are imported first, and explicit
+project overrides of `CustomAfterMicrosoftCommonTargets` retain precedence.
