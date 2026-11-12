@@ -30,4 +30,6 @@ with tempfile.TemporaryDirectory() as temp:
  run('wrong-native-architecture',dict(spec,system=wrong),published,'does not match selected system')
  managed=root/'managed-only';managed.mkdir();shutil.copyfile(assembly,managed/'Answer.dll')
  run('managed-dll-is-not-native',spec,managed,'expected exactly one native library')
+ shutil.copyfile(Path(sys.argv[4])/'native-proof/managed-input.dll',assembly)
+ run('different-compiler-root-pe',spec,published,'managed PE differs from inspected compiler input')
 destination.write_text(json.dumps(rows,indent=2)+'\n')

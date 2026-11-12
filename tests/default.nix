@@ -274,6 +274,7 @@ in
   } --describe" "application: web";
 
   native-ffi = import ./native.nix { inherit pkgs build; };
+  native-multi = import ./native-multi.nix { inherit pkgs build; };
   native-negative = import ./native-negative.nix { inherit pkgs build; };
   workloads-wasm = workloads.packages.Wasm;
 

@@ -8,6 +8,10 @@ let
       exports = [ "native_answer" ];
     };
   };
+  changed = build {
+    src = ./fixtures/native43;
+    nativeProducts.answer = { project = "Answer"; exports = [ "native_answer" ]; };
+  };
 in
 pkgs.runCommand "dotnet-native-negative-controls"
   {
@@ -18,5 +22,6 @@ pkgs.runCommand "dotnet-native-negative-controls"
   }
   ''
     mkdir "$out"
-    python3 ${./native/negative.py} ${../nix/lib/native/verify.py} ${project.nativePackages.answer} "$out/proof.json"
+    python3 ${./native/compiler-input.py} ${../pkgs/dotnet-native-products/resolve-input.py} ${project.nativePackages.answer} ${changed.nativePackages.answer} "$out/compiler-input.json"
+    python3 ${./native/negative.py} ${../nix/lib/native/verify.py} ${project.nativePackages.answer} "$out/proof.json" ${changed.nativePackages.answer}
   ''

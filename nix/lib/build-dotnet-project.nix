@@ -597,10 +597,13 @@ let
         ''}
         dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
           ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"
-        assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" \
+        assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" -p:TargetFramework=${lib.escapeShellArg framework} \
           ${lib.escapeShellArgs buildProperties} -getProperty:TargetPath)
-        ${lib.getExe' sdk "dotnet"} ${nativeInspector}/Inspect.dll "$assembly" "$TMPDIR/managed-exports.json"
-        python3 ${./native/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$assembly"
+        input=$(python3 ${../../pkgs/dotnet-native-products/resolve-input.py} "$assembly" ${lib.escapeShellArg framework} "$TMPDIR/compiler-input.json")
+        ${lib.getExe' sdk "dotnet"} ${nativeInspector}/Inspect.dll "$input" "$TMPDIR/managed-exports.json"
+        python3 ${./native/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$input"
+        cp "$TMPDIR/compiler-input.json" "$out/native-proof/compiler-input.json"
+        cp "$assembly" "$out/native-proof/build-target.dll"
         runHook postInstall
       '';
     }

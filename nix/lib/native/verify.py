@@ -50,7 +50,7 @@ shutil.copyfile(selected,out/spec['library'])
 shutil.copyfile(sys.argv[3],proof/'managed-exports.json')
 assembly=Path(sys.argv[5]).resolve(strict=True)
 assert assembly.is_relative_to(Path.cwd().resolve()), 'managed input is outside selected project source'
-assert hashlib.sha256(assembly.read_bytes()).hexdigest()==metadata['sha256']
+assert hashlib.sha256(assembly.read_bytes()).hexdigest()==metadata['sha256'], 'managed PE differs from inspected compiler input'
 shutil.copyfile(assembly,proof/'managed-input.dll')
 responses=sorted(Path.cwd().rglob('*.ilc.rsp'))
 assert responses, 'native compiler response graph missing'
