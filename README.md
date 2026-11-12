@@ -357,3 +357,12 @@ MSBuild static-asset endpoint generation. This makes the generated HTTP
 manifest; published manifests and browser asset bodies are not rewritten.
 Existing environment-selected common targets are imported first, and explicit
 project overrides of `CustomAfterMicrosoftCommonTargets` retain precedence.
+
+Capture and sandboxed workload builds use a private SDK home. When the
+project does not declare `sdk.workloadVersion` in `global.json`, SDKs that
+support workload sets are configured through their native CLI to use bundled
+manifests. This keeps capture consistent with the manifests used by the pure
+builder, even when newer workload sets appear on the feed. The capability is
+detected from the selected SDK, without a runtime-version allowlist. Explicit
+project workload-set declarations retain precedence; capturing their separate
+downloaded manifest set remains an open integration case.

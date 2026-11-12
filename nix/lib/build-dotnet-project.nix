@@ -257,6 +257,7 @@ let
     cp -rs --no-preserve=mode ${packageFolder}/. "$NUGET_PACKAGES"
     ${lib.optionalString lock.tools "dotnet tool restore --configfile ${toolConfig}"}
     ${lib.optionalString (lock.workloads != [ ]) ''
+      python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
       dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
         --source ${packageFolder}
       ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}

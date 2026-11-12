@@ -17,6 +17,7 @@
 writeShellApplication {
   name = "dotnet-purifier";
   text = ''
+    export DOTNET_PURIFIER_WORKLOAD_MODE_HELPER=${./workload-mode.py}
     export DOTNET_PURIFIER_NIX_LIB=${../../nix/lib}
     export DOTNET_PURIFIER_FLAKE=${../..}
     export DOTNET_PURIFIER_NIXPKGS=${path}
