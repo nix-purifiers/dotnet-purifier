@@ -1,0 +1,12 @@
+<!--
+  A WebAssembly executable whose native runtime is relinked with
+  Emscripten, which needs the wasm-tools workload.
+-->
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wasm</AssemblyName>
+    <WasmBuildNative>true</WasmBuildNative>
+  </PropertyGroup>
+</Project>

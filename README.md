@@ -320,3 +320,33 @@ FluentValidation as the `src` of the flake.
 
 The purifier idea was inspired by nixcloud's
 [cargo (libnix)](https://github.com/nixcloud/cargo).
+
+### Browser WebAssembly resources
+
+Select captured browser projects explicitly when building:
+
+```nix
+(buildDotnetProject {
+  src = ./my-project;
+  browserTargets.MyBrowserApp.webjar = {
+    groupId = "org.example";
+    artifactId = "my-browser-app";
+    version = "1.0.0";
+  };
+}).projections.MyBrowserApp
+```
+
+The result provides `web`, `resources`, and `java-resources` views of the
+complete native `dotnet publish` `wwwroot` tree, preserving the loader,
+managed WebAssembly assemblies, runtime, native relinked modules, compressed
+variants, and their relative paths. `web.documentRoot` is the serving root;
+`java-resources.classPath` is its resource JAR. Optional `webjar` coordinates
+also provide `maven` and `ivy` repositories. Use an empty target set value
+(`browserTargets.MyBrowserApp = { };`) for resource views alone.
+
+Only captured `browser-*` executable projects qualify. WASI executables and
+managed desktop executables do not expose this browser projection. The
+projection preserves the application's own published assets; it does not
+supply an HTML entrypoint or rewrite boot manifests. The existing raw
+`packages` outputs remain available. Explicit `dotnet-sdk` selection applies
+to the producer of every view.

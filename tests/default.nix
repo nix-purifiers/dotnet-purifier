@@ -273,6 +273,8 @@ in
     sources.packages.Web.artifacts."bin/web"
   } --describe" "application: web";
 
+  browser-boundaries = import ./browser-boundaries.nix { inherit pkgs; };
+  browser-projections = import ./browser.nix { inherit pkgs build; };
   workloads-wasm = workloads.packages.Wasm;
 
   # The workload's Emscripten relinked the native runtime: the build

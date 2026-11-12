@@ -82,6 +82,8 @@
   dotnet-sdk ? null,
   # Tools the build needs beyond the SDK.
   nativeBuildInputs ? [ ],
+  # Explicit browser-wasm project names and optional WebJar coordinates.
+  browserTargets ? { },
   # Libraries the build links against.
   buildInputs ? [ ],
   # Fetchers for the purifier library's fetchEntry and tree, such as a
@@ -519,6 +521,17 @@ let
     "package"
     "library"
   ]);
+  browserProjections = import ./browser-projections.nix {
+    inherit
+      lib
+      purifier
+      runCommand
+      python3
+      ;
+    inherit packages;
+    projects = byName lock.projects;
+    targets = browserTargets;
+  };
   testProjects = lib.mapAttrs (_: mkTest) (ofKind [ "test" ]);
 in
 {
@@ -540,5 +553,6 @@ in
     name = "dotnet-purifier-release";
     paths = builtins.attrValues (lib.filterAttrs (_: p: p.kind == "package") packages);
   };
+  projections = browserProjections;
   fetches = lock.entries;
 }
