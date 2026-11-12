@@ -351,6 +351,9 @@ def describe(dotnet, root, project, env):
         "PackageVersion",
         "SelfContained",
         "RuntimeIdentifier",
+        "PublishAot",
+        "NativeLib",
+        "NETCoreSdkPortableRuntimeIdentifier",
     ]
     out = run(
         dotnet,
@@ -385,6 +388,12 @@ def describe(dotnet, root, project, env):
     if kind == "exe":
         record["selfContained"] = props["SelfContained"].lower() == "true"
         record["runtimeIdentifier"] = props["RuntimeIdentifier"]
+    if kind in ("library", "package") and props.get("PublishAot", "").lower() == "true" and props.get("NativeLib", "").lower() == "shared":
+        record["nativePublish"] = {
+            "kind": "shared",
+            "runtimeIdentifier": props["RuntimeIdentifier"] or props["NETCoreSdkPortableRuntimeIdentifier"],
+            "runtimeIdentifierSource": "project" if props["RuntimeIdentifier"] else "sdk-host",
+        }
     if kind == "package":
         record["packageId"] = props["PackageId"]
         record["packageVersion"] = props["PackageVersion"]
@@ -403,6 +412,18 @@ def build_commands(project):
     if project["kind"] == "package":
         return [["pack", path, *BUILD_PROPERTIES, NO_APPHOST, "-o", "{out}"]]
     return [["build", path, *BUILD_PROPERTIES, NO_APPHOST]]
+
+
+
+def native_publish_command(project):
+    """Publish an evaluated NativeAOT shared library, separately from its
+    ordinary managed build or NuGet package."""
+    native = project.get("nativePublish")
+    if native is None:
+        return None
+    rid = ["-r", native["runtimeIdentifier"]] if native["runtimeIdentifier"] else []
+    return ["publish", project["path"], "-f", project["targetFrameworks"][0],
+            *rid, *BUILD_PROPERTIES, "-o", "{nativeOut}"]
 
 
 def artifacts_of(project, out):
@@ -699,6 +720,15 @@ def lock(args, evaluate=False):
             for command in build_commands(project):
                 run(dotnet, [*(a.replace("{out}", str(out)) for a in command), *LOCK_RUN_SWITCHES], build, env)
             project["artifacts"] = artifacts_of(project, out)
+            native_command = native_publish_command(project)
+            if native_command is not None:
+                native_out = tmp / "native-out" / project["name"]
+                run(dotnet, [*(a.replace("{nativeOut}", str(native_out)) for a in native_command), *LOCK_RUN_SWITCHES], build, env)
+                project["nativePublish"]["artifacts"] = sorted(
+                    str(p.relative_to(native_out)) for p in native_out.rglob("*") if p.is_file()
+                )
+                if not project["nativePublish"]["artifacts"]:
+                    fail("native publish produced no artifacts for " + project["name"])
             # The restores for the other machines leave UseAppHost as the
             # project sets it, so the lock also holds the host packs that a
             # developer's own `dotnet build` uses, on every machine.
@@ -707,9 +737,14 @@ def lock(args, evaluate=False):
                 i = restore.index("-f")
                 del restore[i : i + 2]
             for host in BUILD_HOSTS:
+                # A class library with no declared RID gets a host RID during
+                # publish, unlike an ordinary managed build. Capture those
+                # target runtime/compiler packs for each supported SDK host.
+                native_rid = ["-r", host] if project.get("nativePublish", {}).get("runtimeIdentifierSource") == "sdk-host" else []
+                native_host = [f"-p:NETCoreSdkPortableRuntimeIdentifier={host}"] if "nativePublish" in project else []
                 run(
                     dotnet,
-                    ["restore", *restore, f"-p:NETCoreSdkRuntimeIdentifier={host}", *LOCK_RUN_SWITCHES],
+                    ["restore", *restore, *native_rid, *native_host, f"-p:NETCoreSdkRuntimeIdentifier={host}", *LOCK_RUN_SWITCHES],
                     build,
                     env,
                 )

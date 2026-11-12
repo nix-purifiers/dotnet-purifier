@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "sdk": {
+    "version": "10.0.403",
+    "major": 10
+  },
+  "targets": [
+    "Answer.csproj"
+  ],
+  "definitionHash": "sha256-fQ2VrHQsWYPRWnOrMy5cjkecYztsIQR8yZlmPtysVTE=",
+  "tools": false,
+  "workloads": [],
+  "projects": [
+    {
+      "name": "Answer",
+      "path": "Answer.csproj",
+      "kind": "library",
+      "assemblyName": "Answer",
+      "targetFrameworks": [
+        "net10.0",
+        "net9.0"
+      ],
+      "frameworkReferences": [],
+      "nativePublish": {
+        "kind": "shared",
+        "runtimeIdentifier": "linux-x64",
+        "runtimeIdentifierSource": "sdk-host",
+        "artifacts": [
+          "Answer.so",
+          "Answer.so.dbg"
+        ]
+      },
+      "artifacts": [
+        "lib/Answer/Answer.dll"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "microsoft.aspnetcore.app.ref/9.0.22/microsoft.aspnetcore.app.ref.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.ref/9.0.22/microsoft.aspnetcore.app.ref.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-snWs0fwNH6lifDVwb+7eOygmNWfeKuCO0zkSQdX9+qRjO8ELSwJsf2VJx5O6EOfwEDjJEQQTswM2Xf7uoacQ/g=="
+    },
+    {
+      "path": "microsoft.aspnetcore.app.runtime.linux-arm64/10.0.14/microsoft.aspnetcore.app.runtime.linux-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.linux-arm64/10.0.14/microsoft.aspnetcore.app.runtime.linux-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-OtOLEwDfeIWJNsF3EPUOEx6YWrN/bSjPvB1mYzXrvjBY1w4ioShlM2f+7Wzmk+pTWICqyr7B5Yz5h2NawMCI7g=="
+    },
+    {
+      "path": "microsoft.aspnetcore.app.runtime.linux-arm64/9.0.22/microsoft.aspnetcore.app.runtime.linux-arm64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.linux-arm64/9.0.22/microsoft.aspnetcore.app.runtime.linux-arm64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-BeW+hxuZIHCVQ2J/PB+r10G1eWOgVG288M4CHaIqybonhmrAfBOeZacLeh9YUoz9On4RVvBeTS3QrQlrwY099w=="
+    },
+    {
+      "path": "microsoft.aspnetcore.app.runtime.linux-x64/10.0.14/microsoft.aspnetcore.app.runtime.linux-x64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.linux-x64/10.0.14/microsoft.aspnetcore.app.runtime.linux-x64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-Cp+0XHjY+V7Ac2boAkKymKHAAvmpitw231tj4LufSuSlKTeMTRBQvjkKXR1ahkY/x+eCJQu3TDIGNmOgElkU0A=="
+    },
+    {
+      "path": "microsoft.aspnetcore.app.runtime.linux-x64/9.0.22/microsoft.aspnetcore.app.runtime.linux-x64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.linux-x64/9.0.22/microsoft.aspnetcore.app.runtime.linux-x64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-smR1cG2Bx1FXZ7Vs2zTi/9er5R8gfFK1jGNFcMQ1tVduPZ4KDpGv1ppcflyw65XkKE27EsBjsfXjmzK+FJMB+g=="
+    },
+    {
+      "path": "microsoft.aspnetcore.app.runtime.osx-arm64/10.0.14/microsoft.aspnetcore.app.runtime.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.osx-arm64/10.0.14/microsoft.aspnetcore.app.runtime.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-SrQC9AOp1y3wumvs0zlnP/v3mBxiJtx80fmuIi5BjfLwMfTsM0QS1TwQNoekMjIczddtRnwIJgQkx6TpsQkoPQ=="
+    },
+    {
+      "path": "microsoft.aspnetcore.app.runtime.osx-arm64/9.0.22/microsoft.aspnetcore.app.runtime.osx-arm64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.osx-arm64/9.0.22/microsoft.aspnetcore.app.runtime.osx-arm64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-dEut2adIRs9oJuVZYtOk5yiDS3fuLHXJCxQ9u8MesFzFhuNh7rbxM4AQTzcFoFnEvpQwqBxV3JmqgrSM7rwsog=="
+    },
+    {
+      "path": "microsoft.dotnet.ilcompiler/10.0.14/microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.dotnet.ilcompiler/10.0.14/microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-obn/HAYT8K4e5aBYP25r2hlbFTdS58QMsUcwFEnxDIwmRJSeFao0aFGdmVbtrU1QIzSshSBXmqB+4625w7c28A=="
+    },
+    {
+      "path": "microsoft.dotnet.ilcompiler/9.0.22/microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.dotnet.ilcompiler/9.0.22/microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-bLrEiszvMc6sfL+rwR656xXrF5fW4fgdN7WceY7sFgGGeRPVnI1XxEBcM/ud2cQp2hGAWpRePqqdZOPsHTsJog=="
+    },
+    {
+      "path": "microsoft.extensions.primitives/10.0.0/microsoft.extensions.primitives.10.0.0.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.extensions.primitives/10.0.0/microsoft.extensions.primitives.10.0.0.nupkg",
+      "mirrors": [],
+      "hash": "sha512-q7BfP5mrTfRnuM0qBFh+VWpXauE8LTzXtIL1SZg0h/MyOYGLKnsPPbXrRR0odHcYxA5On3IQdKLdqTOMNAk7bQ=="
+    },
+    {
+      "path": "microsoft.net.illink.tasks/10.0.14/microsoft.net.illink.tasks.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.illink.tasks/10.0.14/microsoft.net.illink.tasks.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-YgO/Gkx7Ebb/0FIjQoNRdqn2e1IuzCZaiT3KzPkIIbTvQ17QRGfYNGBCDwkcMOtx2JOzWn0Kwqnuh6SdbSfZqw=="
+    },
+    {
+      "path": "microsoft.net.illink.tasks/9.0.22/microsoft.net.illink.tasks.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.illink.tasks/9.0.22/microsoft.net.illink.tasks.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-rBO7b3jKKiBUzYX+WO4hUCp+Y22vpPoKYv1PdnPY2c1Qn3JetSamB37NbAxHZcgH1BDUbvHBUzt7xYRloyFQNQ=="
+    },
+    {
+      "path": "microsoft.netcore.app.host.linux-arm64/10.0.14/microsoft.netcore.app.host.linux-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-arm64/10.0.14/microsoft.netcore.app.host.linux-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-MU2CWnkhpol8sJXzZ9IqxVQLjHy9cqHQahlI91BH9mbCoV6uRpN6q0Mj5pJLN9qT+LyAhrMhpari229D8QG5hQ=="
+    },
+    {
+      "path": "microsoft.netcore.app.host.linux-arm64/9.0.22/microsoft.netcore.app.host.linux-arm64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-arm64/9.0.22/microsoft.netcore.app.host.linux-arm64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-l8U2r5WY4iV408rLv6JT64hf3cug9t/4HQHdUyKsOGI5blC9TZjRFWBDEO/tIqYBJYfFTc/XO+v5VFfB7xSiQg=="
+    },
+    {
+      "path": "microsoft.netcore.app.host.linux-x64/10.0.14/microsoft.netcore.app.host.linux-x64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-x64/10.0.14/microsoft.netcore.app.host.linux-x64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-LqyCvEWkMshyGeeZ1y1KraQ6czMsISLmMB5VKDT4addsZysxjlMC7WbCryVokdAO7juS8htBOZ3+KaDY5FQ6FA=="
+    },
+    {
+      "path": "microsoft.netcore.app.host.linux-x64/9.0.22/microsoft.netcore.app.host.linux-x64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-x64/9.0.22/microsoft.netcore.app.host.linux-x64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-720YrHLOMQjv38WjJ+ZKb0lz0WBDvfGz5UZbxwyl/5gppuEx+YSuXq94GYrvYU3PMxBPl7ivJzqDpITp8nAg5Q=="
+    },
+    {
+      "path": "microsoft.netcore.app.host.osx-arm64/10.0.14/microsoft.netcore.app.host.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.osx-arm64/10.0.14/microsoft.netcore.app.host.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-seOrLS1kMyoJvCa1fWEmjYCiVGB+Qv6C6j4YndDtHrIb49wMEfH7I2JnMV5bUuPMTRJz7F6GyEmFSAShy93Eag=="
+    },
+    {
+      "path": "microsoft.netcore.app.host.osx-arm64/9.0.22/microsoft.netcore.app.host.osx-arm64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.osx-arm64/9.0.22/microsoft.netcore.app.host.osx-arm64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-0vYrC2lHICNPs4TtsXcJbSLkkY9ALPUmdmlmSUUvlrPCNXw7VUWTBDAy+5ScsEvM1VTxgh2LrGlXJY34mOEPxg=="
+    },
+    {
+      "path": "microsoft.netcore.app.ref/9.0.22/microsoft.netcore.app.ref.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/9.0.22/microsoft.netcore.app.ref.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-BSfQ87Wahavupw7Rv6R/d1YL6gzNG7qru9fPw4Fqw6Nxa57izRpr3hhpDEAyHhHfi90QGuhnvmls+JWTctRrbw=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.linux-arm64/10.0.14/microsoft.netcore.app.runtime.linux-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.linux-arm64/10.0.14/microsoft.netcore.app.runtime.linux-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-XVcOnSgh4EnuySXtcnNRlAer7C6LtXvyT61deqzgHHt4fn0nnpgwiC2zaLkhb7vl1LT1cHeboGc/FGjB6FG5pg=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.linux-arm64/9.0.22/microsoft.netcore.app.runtime.linux-arm64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.linux-arm64/9.0.22/microsoft.netcore.app.runtime.linux-arm64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-hrKkJfd8pnZw1FteBKXBZV7ZocBI27zG1rF+AOskarVUruoWLfhJRCP0cEmkYMJk4Jj0YCfk/05HhkaRHhlFXQ=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.linux-x64/10.0.14/microsoft.netcore.app.runtime.linux-x64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.linux-x64/10.0.14/microsoft.netcore.app.runtime.linux-x64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-IfDwQKE3gcK9u7iU7C/bOaqLNfoRf6zvXzGLHsJAbsC7Shwn5ztRCRWjD1mKRk5XUrPO9VWSC1+q8oimXRDlsg=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.linux-x64/9.0.22/microsoft.netcore.app.runtime.linux-x64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.linux-x64/9.0.22/microsoft.netcore.app.runtime.linux-x64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-f6zPJz45iWkeKmMNRwFOF8FNpiXIpnplg0ezy7DH3NwakSjELkbHpbIq5TMGXManAP6esRjcGJPKurs0jPiLwg=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.nativeaot.linux-arm64/10.0.14/microsoft.netcore.app.runtime.nativeaot.linux-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.nativeaot.linux-arm64/10.0.14/microsoft.netcore.app.runtime.nativeaot.linux-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-kkt+jqbr8OFoAuwLZ5mUKEFnJC504Qwqhgtj259288kKraAPNArh5usAHHSyoUAX8vnetInPHe7ccHfG9ykLnQ=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.nativeaot.linux-x64/10.0.14/microsoft.netcore.app.runtime.nativeaot.linux-x64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.nativeaot.linux-x64/10.0.14/microsoft.netcore.app.runtime.nativeaot.linux-x64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-IIj3QW0MZPRI7NOKO44MpNCMcgLo9+z9/CqWVmtejV735Aap2/cheQ7yGZS28H93+yu4LEKWy1SBcLi5Y4+DHQ=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.nativeaot.osx-arm64/10.0.14/microsoft.netcore.app.runtime.nativeaot.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.nativeaot.osx-arm64/10.0.14/microsoft.netcore.app.runtime.nativeaot.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-SaeXGZoDmwJs/4kLtoaLvpFDl6lTOEytpx/ZR3jtqVRI44farCSXizx3K7QX5T4sBMgLptfLF1Z0lfdGO7qDpw=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.osx-arm64/10.0.14/microsoft.netcore.app.runtime.osx-arm64.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.osx-arm64/10.0.14/microsoft.netcore.app.runtime.osx-arm64.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-aaaa/7gTMAMy7wlLle+AU0VZhYoMUBmImsZI9zcdrpSiZvb1GVVzsyQnwp4vEg+TvPRwm6qQuWisowO1q5AhKg=="
+    },
+    {
+      "path": "microsoft.netcore.app.runtime.osx-arm64/9.0.22/microsoft.netcore.app.runtime.osx-arm64.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.osx-arm64/9.0.22/microsoft.netcore.app.runtime.osx-arm64.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-BrxjCW58J3yUd+v+RAUKkTlwyEOqkQCefaSlAcTFCGo8p5JIMe7IgJ9JV+oOCaNRX2eAHZF7CKktyovIim4KTQ=="
+    },
+    {
+      "path": "runtime.linux-arm64.microsoft.dotnet.ilcompiler/10.0.14/runtime.linux-arm64.microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/runtime.linux-arm64.microsoft.dotnet.ilcompiler/10.0.14/runtime.linux-arm64.microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-UcpmRCl2A+RfQuHHs6CxaErtOJE53heqABJSIRezy6Pa4wrCi5heEi95DMYepn3r8QL8zz5CptiwR4CA43PrRw=="
+    },
+    {
+      "path": "runtime.linux-arm64.microsoft.dotnet.ilcompiler/9.0.22/runtime.linux-arm64.microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/runtime.linux-arm64.microsoft.dotnet.ilcompiler/9.0.22/runtime.linux-arm64.microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-/EB7zMnrrlKi38GnDZ/+ijwRxQyentelc9xV6TPKRubRQTiQaK6rEcn79WHi7y37jw1ybXRhWVwZarHRZlVxTg=="
+    },
+    {
+      "path": "runtime.linux-x64.microsoft.dotnet.ilcompiler/10.0.14/runtime.linux-x64.microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/runtime.linux-x64.microsoft.dotnet.ilcompiler/10.0.14/runtime.linux-x64.microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-m/ieK6s5RbG2CPljI+m6HdDkFg72H/ZSlanRER4btNulnlUvhF+/KJuVZOLM/K5IySJ+RiG6aR8In0uiOoWqig=="
+    },
+    {
+      "path": "runtime.linux-x64.microsoft.dotnet.ilcompiler/9.0.22/runtime.linux-x64.microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/runtime.linux-x64.microsoft.dotnet.ilcompiler/9.0.22/runtime.linux-x64.microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-jx1qvTtMvpsFLj4B2JAfI4T2l1NwgipG1RTWA9rufCX9uikqKxMCdVWAzgqDkigy/leTL8LXgaNlVPy10GWqJg=="
+    },
+    {
+      "path": "runtime.osx-arm64.microsoft.dotnet.ilcompiler/10.0.14/runtime.osx-arm64.microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/runtime.osx-arm64.microsoft.dotnet.ilcompiler/10.0.14/runtime.osx-arm64.microsoft.dotnet.ilcompiler.10.0.14.nupkg",
+      "mirrors": [],
+      "hash": "sha512-U3hoAD9ZqqCaWTwWRu8lr7ckqDF5qXQhkzGW0AFEGjWwJ2qO3l1IMrL26Vso43WM8fhYk+bsIj0Gmjju7gXeGQ=="
+    },
+    {
+      "path": "runtime.osx-arm64.microsoft.dotnet.ilcompiler/9.0.22/runtime.osx-arm64.microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/runtime.osx-arm64.microsoft.dotnet.ilcompiler/9.0.22/runtime.osx-arm64.microsoft.dotnet.ilcompiler.9.0.22.nupkg",
+      "mirrors": [],
+      "hash": "sha512-JnxWhAswvbbTy3Gaf+BUIlbc4uJdYhRE6buv767UkqRmix8fTeb+zRg+taTpX/64MK8LrBHx5g1Fps7hE/j4+Q=="
+    }
+  ],
+  "localPackages": [],
+  "sdkPackages": [],
+  "contentHash": "sha256-pinoHFC9hB5TkyZXbqJCrWa0BeV1Cugj1ebhRMrLdps="
+}

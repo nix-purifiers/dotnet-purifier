@@ -274,6 +274,10 @@ in
     sources.packages.Web.artifacts."bin/web"
   } --describe" "application: web";
 
+  native-ffi = import ./native.nix { inherit pkgs build; };
+  native-multi = import ./native-multi.nix { inherit pkgs build; };
+  native-negative = import ./native-negative.nix { inherit pkgs build; };
+
   browser-boundaries = import ./browser-boundaries.nix { inherit pkgs; };
   browser-projections = import ./browser.nix { inherit pkgs build; };
   workloads-wasm = workloads.packages.Wasm;
