@@ -959,7 +959,8 @@ def install(package_folder, target):
         dest = target / version_dir.relative_to(package_folder)
         package = next(version_dir.glob("*.nupkg"), None)
         current = dest / package.name if package else None
-        if not (dest / ".nupkg.metadata").exists() or package and (not current.is_file() or sha512_sri(current) != sha512_sri(package)):
+        content_hash = dest / (package.name + ".sha512") if package else None
+        if not (dest / ".nupkg.metadata").exists() or package and (not current.is_file() or sha512_sri(current) != sha512_sri(package) or not content_hash.is_file() or content_hash.read_text() != (version_dir / content_hash.name).read_text()):
             shutil.rmtree(dest, ignore_errors=True)
             shutil.copytree(version_dir, dest, symlinks=False, copy_function=shutil.copyfile)
 
@@ -1016,11 +1017,33 @@ def prefetch(args):
     info("prefetched: `dotnet-purifier dotnet` and editors now work with no network")
 
 
+def local_package_entries(root, data):
+    """Resolve existing hashFrom and NuGet content hashes, as lock.nix does.
+
+    A signed package's NuGet content hash differs from its file hash.
+    Neither is substituted for the other's validation.
+    """
+    hashes = nuget_lock_hashes(root)
+    result = {}
+    for kind in ("artifacts", "localPackages", "sdkPackages"):
+        entries = []
+        for entry in data[kind]:
+            package_id, version = entry["path"].split("/")[:2]
+            found = hashes.get((package_id, version))
+            if "hashFrom" in entry and (not found or found[0] != entry["hashFrom"]):
+                fail(f"{entry['hashFrom']} no longer records {entry['path']}; relock the project")
+            file_hash = entry.get("hash") or found[1]
+            entries.append({**entry, "hash": file_hash, "nugetContentHash": found[1] if found else file_hash})
+        result[kind] = entries
+    return result
+
+
 def local_package_folder(root, data, state, selected):
     """Materialize locked dependencies without realizing a Nix SDK."""
     # This lazy attribute only realizes fixed-output dependency fetches.
     # SDK selection and the full project's pure build are not demanded.
     downloads = Path(nix_build(interactive_expr(root, "dependencies"), out_link=state / "downloads")[0])
+    data = local_package_entries(root, data)
     system = {("linux", "x86_64"): "x86_64-linux", ("linux", "aarch64"): "aarch64-linux",
               ("darwin", "arm64"): "aarch64-darwin"}.get((sys.platform, platform.machine()))
     packages = []

@@ -94,6 +94,20 @@ class LocalRuntime(unittest.TestCase):
         with mock.patch.object(cli, "nix_build", return_value=[str(self.root)]), self.assertRaises(SystemExit):
             cli.local_package_folder(self.root, data, state, cli.local_sdk(self.root))
 
+    def test_signed_nuget_hash_and_hashfrom_have_distinct_roles(self):
+        data = {"artifacts": [{"path": "signed/1/signed.1.nupkg", "hash": "sha512-file"},
+                              {"path": "unsigned/1/unsigned.1.nupkg", "hashFrom": "packages.lock.json"}],
+                "localPackages": [], "sdkPackages": []}
+        hashes = {("signed", "1"): ("packages.lock.json", "sha512-nuget"),
+                  ("unsigned", "1"): ("packages.lock.json", "sha512-same")}
+        with mock.patch.object(cli, "nuget_lock_hashes", return_value=hashes):
+            entries = cli.local_package_entries(self.root, data)["artifacts"]
+        self.assertEqual(entries[0]["hash"], "sha512-file")
+        self.assertEqual(entries[0]["nugetContentHash"], "sha512-nuget")
+        self.assertEqual(entries[1]["hash"], "sha512-same")
+        with mock.patch.object(cli, "nuget_lock_hashes", return_value={}), self.assertRaises(SystemExit):
+            cli.local_package_entries(self.root, data)
+
 
 if __name__ == "__main__":
     unittest.main()
