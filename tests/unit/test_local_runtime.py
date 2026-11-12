@@ -30,7 +30,7 @@ class LocalRuntime(unittest.TestCase):
         self.link.symlink_to(self.dotnet)
         self.env = mock.patch.dict(os.environ, {
             "DOTNET_PURIFIER_DOTNET": str(self.link),
-            "DOTNET_PURIFIER_NIX_LIB": os.environ.get("DOTNET_PURIFIER_NIX_LIB", str(Path(cli.__file__).resolve().parents[1] / "nix/lib")),
+            "DOTNET_PURIFIER_NIX_LIB": os.environ.get("DOTNET_PURIFIER_NIX_LIB", str(Path(cli.__file__).resolve().parents[1] / "pkgs/build-dotnet-project")),
             "DOTNET_PURIFIER_NIXPKGS": "/unused-nixpkgs",
             "DOTNET_PURIFIER_SYSTEM": "x86_64-linux",
             "DOTNET_PURIFIER_FLAKE": "/unused-flake",
