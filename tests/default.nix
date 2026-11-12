@@ -231,6 +231,7 @@ in
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;
   multi-tests = multi.tests;
+  multi-tests-native = multi.tests.projects."Greeter.Tests";
   test-network-boundary = import ./test-network.nix {
     inherit pkgs;
     testProject = multi.tests.projects."Greeter.Tests";
@@ -312,6 +313,7 @@ in
   realworld-fluentvalidation-benchmarks =
     fluentvalidation.packages."FluentValidation.Tests.Benchmarks";
   realworld-fluentvalidation-tests = fluentvalidation.tests;
+  realworld-fluentvalidation-tests-native = fluentvalidation.tests.projects."FluentValidation.Tests";
 }
 // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
   sources-standalone = sources.packages.Standalone;
