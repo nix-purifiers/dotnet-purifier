@@ -10,7 +10,10 @@ let
   };
   changed = build {
     src = ./fixtures/native43;
-    nativeProducts.answer = { project = "Answer"; exports = [ "native_answer" ]; };
+    nativeProducts.answer = {
+      project = "Answer";
+      exports = [ "native_answer" ];
+    };
   };
 in
 pkgs.runCommand "dotnet-native-negative-controls"
