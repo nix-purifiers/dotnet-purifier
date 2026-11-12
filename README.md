@@ -22,6 +22,13 @@ test and editor commands with this setup. Nix provides the locked
 dependencies; the development commands above run outside the Nix sandbox.
 No project Nix files are needed for this workflow.
 
+Keep the project's existing .NET installation on `PATH`, or set
+`DOTNET_PURIFIER_DOTNET` to its `dotnet` executable. Local capture,
+prefetch and development use that installation and its `global.json`
+selection. They do not install a Nix SDK or replace the project's runtime.
+Capture and restore require an installed SDK with the capabilities the
+project uses; a runtime-only installation cannot run MSBuild.
+
 Sandboxed builds of the whole project are an optional
 [next step](#building-the-project-with-nix).
 
@@ -44,10 +51,10 @@ dotnet-purifier dotnet run \
   --project src/App
 ```
 
-Every restore reads only the locked packages, with the locked SDK and the
-runtime of every target framework of the build, so `dotnet test` runs each
-framework's tests. `dotnet tool restore` and `dotnet workload restore` read
-the locked packages too.
+Every restore reads only the locked packages, using the project's installed
+SDK and runtimes. Install any framework runtimes that its tests require.
+`dotnet tool restore` and `dotnet workload restore` read the locked packages
+too. Runtime versions recorded by tests are evidence, not a local allowlist.
 
 To add or upgrade a package, edit the project file, or use the SDK's own
 commands with the network, then relock:
@@ -203,25 +210,23 @@ nix shell 'github:nix-purifiers/dotnet-purifier'
 dotnet-purifier prefetch
 ```
 
-`prefetch` builds the locked packages, the SDK with every runtime the build
-targets and the libraries a self-contained runtime loads. It keeps them
-with garbage-collector roots in the `.dotnet-purifier/` directory next to
-the lockfile. It installs the packages
+`prefetch` fetches the locked artifacts through Nix without realizing a
+project SDK. It keeps those dependency roots and the materialized package
+folder in `.dotnet-purifier/` next to the lockfile. It installs the packages
 into your NuGet package folder, restores the local tools and the
 workloads, and restores every project. Afterwards `dotnet-purifier dotnet`
-uses those store paths without evaluating Nix, so the development loop works
-with the network cut off. When the lock changes, the next
-`dotnet-purifier dotnet` prefetches again.
+uses the same installed SDK and cached packages, so the development loop
+works with the network cut off. When the lock or selected installation
+changes, the next `dotnet-purifier dotnet` prefetches again. Prefetch does
+not supply missing runtimes or native ABI libraries by replacing the host.
 
 ## Editor
 
 After a prefetch, the packages are in your NuGet package folder and every
 project is restored, so a language server that reads a project through
 MSBuild (the Roslyn language server, csharp-ls or OmniSharp) works with no
-network. Run it with the locked SDK, which `prefetch` links at
-`.dotnet-purifier/sdk` next to the lockfile: put `.dotnet-purifier/sdk/bin`
-first on its `PATH` and set `DOTNET_ROOT` to
-`.dotnet-purifier/sdk/share/dotnet`. Navigation into
+network. Run it with the same installed SDK used for capture and prefetch.
+Navigation into
 a package's code decompiles it locally; source files that SourceLink
 downloads need the network.
 
@@ -272,10 +277,12 @@ A lock run stops, naming the reason, on these:
 - **Windows and macOS target frameworks.** They need their platform's SDK,
   which no Nix build has.
 
-Other limits: a lock is made with the nixpkgs SDK of the major version
-`global.json` names (10 when there is none), and a Nix build uses the SDK of
-that major version from your nixpkgs, warning when the patch version
-differs. Workload tools run interactively on NixOS with `programs.nix-ld`.
+For full sandboxed builds, the default toolchain is the nixpkgs SDK of the
+major version recorded in the lock, warning when its patch differs. Supply
+an immutable `dotnet-sdk` to the builder when needed. Local capture does
+not promise that a host-only SDK can be replayed in a Nix sandbox; the pure
+build's toolchain and native dependencies must be provided separately.
+Workload tools run interactively on NixOS with `programs.nix-ld`.
 
 ## Examples
 

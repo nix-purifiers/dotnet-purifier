@@ -15,12 +15,10 @@
       keeps the versions the project files name.
 
   dotnet-purifier prefetch
-      Realizes what the development loop and an editor need, with garbage
-      collector roots in .dotnet-purifier/ beside the lockfile: the locked
-      packages, which it installs in the NuGet package folder, the SDK with
-      the runtime of every target framework, the local tools and the
-      workloads. It then
-      restores every target, so an editor finds what a restore writes.
+      Fetches the locked packages through Nix, installs them in the NuGet
+      package folder, and restores local tools, workloads and every target
+      using the project's installed SDK. It keeps dependency roots and
+      local state in .dotnet-purifier/ beside the lockfile.
       Afterwards both work with the network cut off.
 
   dotnet-purifier publish [ARG...]
@@ -47,12 +45,18 @@ DOTNET_PURIFIER_NIXPKGS
 (the nixpkgs the SDKs come from), DOTNET_PURIFIER_SYSTEM (the Nix system)
 and DOTNET_PURIFIER_DEFAULT_SDK (the SDK major version used when the build
 has no global.json).
+
+Local lock, update, prefetch and development use DOTNET_PURIFIER_DOTNET,
+or dotnet on PATH. They never install or select a Nix SDK implicitly.
+The project and global.json determine which installed SDK is selected.
+Full sandboxed project builds select their immutable toolchain separately.
 """
 
 import base64
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -137,7 +141,7 @@ def reference_packs_only(env, directory, dotnet):
     environment variables as properties."""
     shutil.rmtree(directory, ignore_errors=True)
     directory.mkdir(parents=True)
-    packs = Path(dotnet).parent.parent / "share" / "dotnet" / "packs"
+    packs = sdk_root(dotnet) / "packs"
     for pack in sorted(packs.glob("*.Ref")):
         (directory / pack.name).symlink_to(pack)
     env["NETCoreTargetingPackRoot"] = str(directory)
@@ -266,13 +270,68 @@ def sdk(major):
     fail(f"the .NET SDK {major} that nixpkgs built has no bin/dotnet")
 
 
+SDK_ROOTS = {}
+
+
+def sdk_root(dotnet):
+    """The selected installation, including ordinary and symlinked hosts."""
+    key = str(dotnet)
+    if key in SDK_ROOTS:
+        return SDK_ROOTS[key]
+    executable = Path(dotnet).resolve()
+    for root in (executable.parent, executable.parent.parent / "share" / "dotnet"):
+        if any((root / name).is_dir() for name in ("sdk", "sdk-manifests", "library-packs")):
+            return root
+    fail(f"cannot locate the SDK installation for {dotnet}; select the installed SDK with DOTNET_PURIFIER_DOTNET")
+
+
+def local_dotnet():
+    """Select the installed host without interpreting its version."""
+    requested = os.environ.get("DOTNET_PURIFIER_DOTNET") or "dotnet"
+    dotnet = shutil.which(requested)
+    if not dotnet:
+        fail(f"local dotnet {requested!r} was not found; put the project's installation on PATH or set DOTNET_PURIFIER_DOTNET")
+    return os.path.abspath(dotnet)
+
+
+def local_sdk(root):
+    """Use the project's installed SDK; Nix is never a local fallback."""
+    dotnet = local_dotnet()
+    env = with_sdk_on_path(dict(os.environ), dotnet)
+    try:
+        result = subprocess.run([dotnet, "--version"], cwd=root, env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    except OSError as error:
+        fail(f"cannot execute selected local dotnet {dotnet}: {error}")
+    if result.returncode:
+        fail(f"the selected local dotnet ({dotnet}) cannot select an SDK for {root}; check the installed SDK and global.json:\n{result.stderr.strip()}")
+    version = result.stdout.strip()
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version):
+        fail(f"the selected dotnet reported an invalid SDK version: {version!r}")
+    sdks = run(dotnet, ["--list-sdks"], root, env, capture=True)
+    roots = {Path(path).parent.resolve() for found, path in re.findall(r"^([^\s]+)\s+\[(.+)\]$", sdks, re.M) if found == version}
+    if len(roots) != 1:
+        fail(f"cannot identify the installation of selected SDK {version} from {dotnet} --list-sdks")
+    installation = roots.pop()
+    SDK_ROOTS[dotnet] = installation
+    runtimes = run(dotnet, ["--list-runtimes"], root, env, capture=True).strip()
+    executable = Path(dotnet).resolve()
+    stat = executable.stat()
+    return {"dotnet": dotnet, "root": str(installation), "version": version,
+            "runtimes": runtimes, "executable": str(executable),
+            "executableSize": stat.st_size, "executableMtimeNs": stat.st_mtime_ns}
+
+
 def with_sdk_on_path(env, dotnet):
-    """The environment with the SDK first on PATH, as a build that runs
-    `dotnet` itself expects, and as the Nix build has it. DOTNET_ROOT names
-    the SDK too: MSBuild starts task hosts through the SDK's MSBuild
-    apphost, which finds the runtime only through it."""
+    """Keep the selected host first on PATH, without a Nix layout assumption.
+
+    Give MSBuild's apphost the discovered root when none was configured.
+    """
     env["PATH"] = f"{Path(dotnet).parent}{os.pathsep}{env.get('PATH', '')}"
-    env["DOTNET_ROOT"] = str(Path(dotnet).parent.parent / "share" / "dotnet")
+    # Preserve the caller's host/runtime configuration. Ordinary dotnet
+    # installations and wrappers need not have the Nix SDK directory layout.
+    if str(dotnet) in SDK_ROOTS:
+        env.setdefault("DOTNET_ROOT", str(SDK_ROOTS[str(dotnet)]))
     return env
 
 
@@ -551,7 +610,7 @@ def workload_packs(dotnet, workloads):
     with --skip-manifest-update reads: a workload names its packs and the
     workloads it extends, and a pack names its version and, when it
     differs by machine, the package for each machine (`alias-to`)."""
-    manifests = Path(dotnet).parent.parent / "share" / "dotnet" / "sdk-manifests"
+    manifests = sdk_root(dotnet) / "sdk-manifests"
     definitions, packs = {}, {}
     for path in sorted(manifests.glob("*/*/*/WorkloadManifest.json")) + sorted(manifests.glob("*/*/WorkloadManifest.json")):
         manifest = read_manifest_json(path.read_text())
@@ -613,7 +672,7 @@ def installed_packages(packages_dir, build, sources, dotnet):
     artifacts = []
     local = []
     sdk_packages = []
-    library_packs = (Path(dotnet).parent.parent / "share" / "dotnet" / "library-packs").resolve()
+    library_packs = (sdk_root(dotnet) / "library-packs").resolve()
     for metadata in sorted(packages_dir.glob("*/*/.nupkg.metadata")):
         version_dir = metadata.parent
         package_id = version_dir.parent.name
@@ -668,14 +727,14 @@ def lock(args, evaluate=False):
     targets = targets or default_targets(root)
     path = lock_path(root)
     def_hash = definition_hash(root, targets)
+    selected = local_sdk(root)
     if not force and path.is_file():
         old = json.loads(path.read_text())
-        if old.get("version") == FORMAT_VERSION and old.get("definitionHash") == def_hash:
+        if old.get("version") == FORMAT_VERSION and old.get("definitionHash") == def_hash and old.get("sdk", {}).get("version") == selected["version"]:
             info(f"{LOCK_NAME} is up to date")
             return
 
-    major = sdk_major(root)
-    dotnet = f"{sdk(major)}/bin/dotnet"
+    dotnet = selected["dotnet"]
     tools = (root / ".config" / "dotnet-tools.json").is_file()
 
     with tempfile.TemporaryDirectory(prefix="dotnet-purifier-") as tmp:
@@ -690,6 +749,9 @@ def lock(args, evaluate=False):
         subprocess.run([sys.executable, workload_mode, dotnet], cwd=build, env=env, check=True)
 
         sdk_version = run(dotnet, ["--version"], build, env, capture=True).strip()
+        if sdk_version != selected["version"]:
+            fail(f"the copied project selected SDK {sdk_version}, but the original selected {selected['version']}; check ancestor global.json files")
+        major = int(sdk_version.split(".")[0])
         info(f"locking with the .NET SDK {sdk_version}")
         # A build may run the local tools, and needs its workloads, so both
         # are installed first.
@@ -895,7 +957,9 @@ def install(package_folder, target):
     folder lacks into it, the way NuGet installs them."""
     for version_dir in sorted(Path(package_folder).glob("*/*")):
         dest = target / version_dir.relative_to(package_folder)
-        if not (dest / ".nupkg.metadata").exists():
+        package = next(version_dir.glob("*.nupkg"), None)
+        current = dest / package.name if package else None
+        if not (dest / ".nupkg.metadata").exists() or package and (not current.is_file() or sha512_sri(current) != sha512_sri(package)):
             shutil.rmtree(dest, ignore_errors=True)
             shutil.copytree(version_dir, dest, symlinks=False, copy_function=shutil.copyfile)
 
@@ -922,10 +986,8 @@ def locked_config(path, package_folder):
 
 
 def everyday_env(state, paths):
-    """The environment of `dotnet-purifier dotnet` and of prefetch: the
-    locked SDK first on PATH, and every restore reading only the locked
-    packages."""
-    dotnet = f"{paths['sdk']}/bin/dotnet"
+    """Keep the installed runtime, with restores using locked packages."""
+    dotnet = paths["dotnet"]
     env = with_sdk_on_path(dict(os.environ), dotnet)
     # MSBuild reads environment variables as properties, so every restore
     # that dotnet runs, explicit or implicit, reads only the locked
@@ -938,12 +1000,6 @@ def everyday_env(state, paths):
     # checks.
     env["DOTNET_NUGET_SIGNATURE_VERIFICATION"] = "false"
     env["DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE"] = "true"
-    reference_packs_only(env, state / "packs", dotnet)
-    # A self-contained build runs on the runtime NuGet installed, which
-    # loads ICU and OpenSSL from the system; the Nix build's wrapper gives
-    # it the same libraries.
-    libraries = f"{paths['runtimeLibraries']}/lib"
-    env["LD_LIBRARY_PATH"] = os.pathsep.join(filter(None, [libraries, env.get("LD_LIBRARY_PATH")]))
     return env
 
 
@@ -960,19 +1016,49 @@ def prefetch(args):
     info("prefetched: `dotnet-purifier dotnet` and editors now work with no network")
 
 
-def prefetch_paths(root, data):
+def local_package_folder(root, data, state, selected):
+    """Materialize locked dependencies without realizing a Nix SDK."""
+    # This lazy attribute only realizes fixed-output dependency fetches.
+    # SDK selection and the full project's pure build are not demanded.
+    downloads = Path(nix_build(interactive_expr(root, "dependencies"), out_link=state / "downloads")[0])
+    system = {("linux", "x86_64"): "x86_64-linux", ("linux", "aarch64"): "aarch64-linux",
+              ("darwin", "arm64"): "aarch64-darwin"}.get((sys.platform, platform.machine()))
+    packages = []
+    for entry in data["artifacts"]:
+        if system and entry.get("systems") and system not in entry["systems"]:
+            continue
+        file = downloads / entry["path"]
+        if not file.is_file() or sha512_sri(file) != entry["hash"]:
+            fail(f"locked package {entry['path']} is missing or changed at {file}")
+        packages.append({**entry, "file": str(file), "nugetContentHash": entry.get("nugetContentHash", entry["hash"])})
+    for key, base in (("localPackages", root), ("sdkPackages", Path(selected["root"]) / "library-packs")):
+        for entry in data[key]:
+            file = base / entry["file"]
+            if not file.is_file() or sha512_sri(file) != entry["hash"]:
+                fail(f"locked package {entry['path']} is missing or changed at {file}; relock with the selected local SDK")
+            packages.append({**entry, "file": str(file), "nugetContentHash": entry.get("nugetContentHash", entry["hash"])})
+    destination = state / "packages"
+    helper = Path(os.environ["DOTNET_PURIFIER_NIX_LIB"]) / "package-folder.py"
+    with tempfile.TemporaryDirectory(prefix="packages-", dir=state) as tmp:
+        tmp = Path(tmp)
+        manifest = tmp / "packages.json"
+        manifest.write_text(json.dumps(packages))
+        subprocess.run([sys.executable, str(helper), str(manifest), str(tmp / "out")], check=True)
+        if destination.is_symlink():
+            destination.unlink()
+        elif destination.exists():
+            shutil.rmtree(destination)
+        (tmp / "out").rename(destination)
+    return str(destination)
+
+
+def prefetch_paths(root, data, selected=None):
+    selected = selected or local_sdk(root)
     state = state_dir(root)
     state.mkdir(exist_ok=True)
-    paths = {
-        name: nix_build(interactive_expr(root, name), out_link=state / link)[0]
-        for name, link in [("packageFolder", "packages"), ("runtimeLibraries", "runtime-libraries")]
-    }
-    # The SDK has a man output too, which nix build prints in no fixed
-    # order beside the one with bin/dotnet.
-    sdk_outputs = nix_build(interactive_expr(root, "sdk"), out_link=state / "sdk")
-    paths["sdk"] = next((p for p in sdk_outputs if (Path(p) / "bin" / "dotnet").exists()), sdk_outputs[0])
+    paths = {"dotnet": selected["dotnet"], "packageFolder": local_package_folder(root, data, state, selected)}
     env = everyday_env(state, paths)
-    dotnet = f"{paths['sdk']}/bin/dotnet"
+    dotnet = paths["dotnet"]
     install(paths["packageFolder"], user_package_folder(env))
     if data["tools"]:
         config = locked_config(state / "nuget.config", paths["packageFolder"])
@@ -983,19 +1069,20 @@ def prefetch_paths(root, data):
     # An editor reads what a restore writes under obj/.
     for target in data["targets"]:
         run(dotnet, ["restore", target], root, env)
-    (state / "prefetched.json").write_text(json.dumps({"contentHash": data["contentHash"], **paths}, indent=2) + "\n")
+    (state / "prefetched.json").write_text(json.dumps({"contentHash": data["contentHash"], "toolchain": selected, **paths}, indent=2) + "\n")
     return paths
 
 
-def prefetched(root, data):
+def prefetched(root, data, selected=None):
     """The paths the last prefetch realized, when it prefetched this lock
-    and they are still in the store, and None otherwise."""
+    with this installed SDK and the paths still exist, or None otherwise."""
     try:
         record = json.loads((state_dir(root) / "prefetched.json").read_text())
     except (OSError, json.JSONDecodeError):
         return None
-    paths = {k: v for k, v in record.items() if k != "contentHash"}
-    if record.get("contentHash") != data["contentHash"] or not all(Path(p).exists() for p in paths.values()):
+    selected = selected or local_sdk(root)
+    paths = {k: record[k] for k in ("dotnet", "packageFolder") if k in record}
+    if set(paths) != {"dotnet", "packageFolder"} or record.get("toolchain") != selected or record.get("contentHash") != data["contentHash"] or not all(Path(p).exists() for p in paths.values()):
         return None
     return paths
 
@@ -1031,17 +1118,16 @@ def run_dotnet(args):
     root = Path.cwd()
     if not lock_path(root).exists():
         info('warning: no dotnet-purifier.lock.json found; running dotnet impurely. Run `dotnet-purifier lock` to use Nix-resolved dependencies.')
-        dotnet = os.environ.get("DOTNET_PURIFIER_DOTNET") or shutil.which("dotnet")
-        if not dotnet:
-            dotnet = f"{sdk(sdk_major(root))}/bin/dotnet"
+        dotnet = local_dotnet()
         os.execvp(dotnet, [dotnet, *args])
     root = build_root()
     data = read_lock(root)
     state = state_dir(root)
-    paths = prefetched(root, data)
+    selected = local_sdk(root)
+    paths = prefetched(root, data, selected)
     if paths is None:
         info(f"prefetching for {lock_path(root).name}")
-        paths = prefetch_paths(root, data)
+        paths = prefetch_paths(root, data, selected)
     env = everyday_env(state, paths)
     # A workload install reads its packs from the locked packages, with the
     # manifests the SDK ships with, as in the lock run.
@@ -1050,7 +1136,7 @@ def run_dotnet(args):
     if args[:2] == ["tool", "restore"] and "--configfile" not in args:
         args = [*args, "--configfile", str(locked_config(state / "nuget.config", paths["packageFolder"]))]
     since = time.time()
-    result = subprocess.run([f"{paths['sdk']}/bin/dotnet", *args], env=env, check=False)
+    result = subprocess.run([paths["dotnet"], *args], env=env, check=False)
     if result.returncode != 0:
         missing = missing_packages(root, since)
         if missing:
@@ -1066,7 +1152,7 @@ def update(args):
     path = lock_path(root)
     targets = json.loads(path.read_text()).get("targets") if path.is_file() else None
     targets = targets or default_targets(root)
-    dotnet = f"{sdk(sdk_major(root))}/bin/dotnet"
+    dotnet = local_sdk(root)["dotnet"]
     env = with_sdk_on_path(dict(os.environ), dotnet)
     env["DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE"] = "true"
     # `dotnet package update` restores, which rewrites the build's

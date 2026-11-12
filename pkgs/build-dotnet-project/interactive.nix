@@ -24,7 +24,7 @@ let
   };
 in
 {
-  inherit (build) packageFolder sdk release;
+  inherit (build) dependencies packageFolder sdk release;
   runtimeLibraries = pkgs.symlinkJoin {
     name = "dotnet-purifier-runtime-libraries";
     paths = map pkgs.lib.getLib build.runtimeLibraries;
