@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: MIT
-{ runCommand, sdk }:
+{
+  runCommand,
+  sdk,
+  globalJson ? null,
+}:
+let
+  selectProjectSdk = if globalJson == null then "" else "cp ${globalJson} global.json";
+in
 runCommand "dotnet-native-export-inspector"
   {
     nativeBuildInputs = [ sdk ];
@@ -10,6 +17,7 @@ runCommand "dotnet-native-export-inspector"
     export DOTNET_CLI_HOME="$HOME"
     export DOTNET_CLI_TELEMETRY_OPTOUT=1
     mkdir -p "$HOME" project empty-feed
+    ${selectProjectSdk}
     major=$(dotnet --version)
     major="''${major%%.*}"
     cat > project/Inspect.csproj <<XML

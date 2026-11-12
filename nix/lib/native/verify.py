@@ -2,6 +2,7 @@
 """Bind owned managed PE export metadata to an actual native shared library."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -51,9 +52,43 @@ assembly=Path(sys.argv[5]).resolve(strict=True)
 assert assembly.is_relative_to(Path.cwd().resolve()), 'managed input is outside selected project source'
 assert hashlib.sha256(assembly.read_bytes()).hexdigest()==metadata['sha256']
 shutil.copyfile(assembly,proof/'managed-input.dll')
+responses=sorted(Path.cwd().rglob('*.ilc.rsp'))
+assert responses, 'native compiler response graph missing'
+for response in responses:
+    target=proof/'compiler-responses'/response.relative_to(Path.cwd())
+    target.parent.mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(response,target)
 record={'assembly':metadata['assembly'],'managedSha256':metadata['sha256'],'library':spec['library'],
         'nativePublishedPath':str(selected.relative_to(published)),
         'nativeSha256':hashlib.sha256(selected.read_bytes()).hexdigest(),
         'exports':{n:owned[n] for n in spec['exports']},'system':spec['system'],
         'runtime':{'initialization':'native-loader','lifetime':'process','unload':False}}
+# Fixed-width CLI scalar and unmanaged pointer signatures can be represented
+# directly in a C declaration. Aggregate layouts remain explicit metadata.
+primitive={'Void':'void','SByte':'int8_t','Byte':'uint8_t','Int16':'int16_t','UInt16':'uint16_t',
+           'Int32':'int32_t','UInt32':'uint32_t','Int64':'int64_t','UInt64':'uint64_t',
+           'IntPtr':'intptr_t','UIntPtr':'uintptr_t','Single':'float','Double':'double'}
+def ctype(value):
+    if value in primitive:return primitive[value]
+    if value.endswith('*'):
+        base=ctype(value[:-1]);return None if base is None else base+'*'
+    return None
+include=out/'include';include.mkdir()
+declarations=[];unsupported=[]
+for entry in spec['exports']:
+    method=owned[entry];result=ctype(method['returnType']);parameters=[ctype(p) for p in method['parameters']]
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',entry) or result is None or any(p is None for p in parameters):
+        unsupported.append(entry);continue
+    declarations.append(result+' '+entry+'('+(', '.join(p+' arg'+str(i) for i,p in enumerate(parameters)) or 'void')+');')
+record['header']=None
+if not unsupported:
+    body='\n'.join(declarations)+'\n'
+    guard='PURIFIER_NATIVE_'+metadata['sha256'][:24].upper()
+    header='#ifndef '+guard+'\n#define '+guard+'\n#include <stdint.h>\n#ifdef __cplusplus\nextern "C" {\n#endif\n'+body+'#ifdef __cplusplus\n}\n#endif\n#endif\n'
+    (include/(spec['name']+'.h')).write_text(header)
+    (include/(spec['name']+'.cdef')).write_text(body)
+    record['header']='include/'+spec['name']+'.h'
+record['headerUnsupportedExports']=unsupported
+pc=out/'lib/pkgconfig';pc.mkdir()
+(pc/(spec['name']+'.pc')).write_text('prefix='+str(out)+'\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n\nName: '+spec['name']+'\nDescription: NativeAOT '+metadata['assembly']+'\nVersion: '+metadata['assemblyVersion']+'\nLibs: -L${libdir} -l'+spec['name']+'\nCflags: -I${includedir}\n')
 (out/'native-products.json').write_text(json.dumps(record,indent=2,sort_keys=True)+'\n')

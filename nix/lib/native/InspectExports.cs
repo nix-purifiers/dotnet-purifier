@@ -89,8 +89,10 @@ static class InspectExports {
             }
         }
         var result=new {assembly=reader.GetString(reader.GetAssemblyDefinition().Name),
+            assemblyVersion=reader.GetAssemblyDefinition().Version.ToString(),
             mvid=reader.GetGuid(reader.GetModuleDefinition().Mvid).ToString(),
-            sha256=Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),exports};
+            sha256=Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            references=reader.AssemblyReferences.Select(h=> { var a=reader.GetAssemblyReference(h); return new {name=reader.GetString(a.Name),version=a.Version.ToString()}; }).ToArray(),exports};
         File.WriteAllText(args[1],JsonSerializer.Serialize(result,new JsonSerializerOptions{WriteIndented=true})+"\n");
     }
 }

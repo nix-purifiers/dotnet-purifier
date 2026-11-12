@@ -521,7 +521,11 @@ let
     "package"
     "library"
   ]);
-  nativeInspector = import ./native/inspector.nix { inherit runCommand sdk; };
+  nativeInspector = import ./native/inspector.nix {
+    inherit runCommand sdk;
+    globalJson =
+      if builtins.pathExists "${filteredSrc}/global.json" then "${filteredSrc}/global.json" else null;
+  };
   nativePackages = lib.mapAttrs (
     name: options:
     let
@@ -543,8 +547,8 @@ let
         ) == [ ]
     ) "dotnet-purifier: native product accepts project and explicit exports only";
     assert lib.assertMsg (
-      builtins.match "[A-Za-z_][A-Za-z0-9_]*" name != null
-    ) "dotnet-purifier: native product name must be a C identifier";
+      builtins.match "[A-Za-z0-9_][A-Za-z0-9_.+-]*" name != null
+    ) "dotnet-purifier: native product name must be a valid library label";
     assert lib.assertMsg (p ? nativePublish && p.nativePublish.kind == "shared")
       "dotnet-purifier: selected native project must have a captured NativeAOT shared publish; relock it";
     assert lib.assertMsg (
@@ -576,7 +580,7 @@ let
         PY
       '';
       nativeSpec = builtins.toJSON {
-        inherit library exports;
+        inherit name library exports;
         assembly = p.assemblyName;
         system = stdenv.hostPlatform.system;
       };
@@ -607,6 +611,8 @@ let
       inherit producer runCommand python3;
       system = stdenv.hostPlatform.system;
       libraries.${name} = "lib/lib${name}${stdenv.hostPlatform.extensions.sharedLibrary}";
+      includeDirectories = [ "include" ];
+      pkgConfigDirectories = [ "lib/pkgconfig" ];
       targetMetadata.${name} = {
         abi = "c";
         exports = nativeProducts.${name}.exports;

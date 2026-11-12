@@ -273,6 +273,8 @@ in
     sources.packages.Web.artifacts."bin/web"
   } --describe" "application: web";
 
+  native-ffi = import ./native.nix { inherit pkgs build; };
+  native-negative = import ./native-negative.nix { inherit pkgs build; };
   workloads-wasm = workloads.packages.Wasm;
 
   # The workload's Emscripten relinked the native runtime: the build

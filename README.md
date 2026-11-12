@@ -320,3 +320,47 @@ FluentValidation as the `src` of the flake.
 
 The purifier idea was inspired by nixcloud's
 [cargo (libnix)](https://github.com/nixcloud/cargo).
+
+### NativeAOT shared-library projections
+
+A class library which declares `PublishAot=true` and `NativeLib=Shared` can
+be selected explicitly after capture:
+
+```nix
+let project = buildDotnetProject {
+  src = ./my-project;
+  dotnet-sdk = myImmutableSdk;
+  nativeProducts.answer = {
+    project = "Answer";
+    exports = [ "native_answer" ];
+  };
+}; in project.projections.answer
+```
+
+Capture performs the ordinary managed build or NuGet pack and a separate
+native publish. The lock records the native output and captures native
+compiler and target-runtime packages for the supported SDK hosts. The
+ordinary `packages` and `release` outputs retain their existing meaning;
+`nativePackages.<name>` is the selected native producer. The `native`,
+`python-ffi`, and `java-ffi` projections use that producer's actual shared
+library. The selected immutable SDK drives project compilation and the
+metadata inspector, including the project's `global.json` SDK selection.
+
+Each advertised entrypoint must belong to the selected managed PE assembly,
+have an `UnmanagedCallersOnly` export declaration, and be defined by the
+native binary for the selected platform. The producer retains the managed
+input, native compiler response files, and original native publish tree.
+Original and packaged native-library hashes distinguish any Nix relocation.
+
+Fixed-width scalar and unmanaged pointer signatures also provide derived C
+headers and CFFI declarations under `include/`, plus a pkg-config file under
+`lib/pkgconfig/`. Aggregate layouts and other signatures remain explicit PE
+metadata; `headerUnsupportedExports` identifies exports without an automatic
+header. Consumers supply compatible signatures and marshaling. No managed
+DLL is treated as a native library.
+
+NativeAOT initializes its runtime through native library loading and entry
+stubs. Keep libraries loaded for process lifetime: unloading is unsupported.
+The checks exercise independent source revisions, a captured NuGet library,
+managed allocation and garbage collection, C/C++ callers, ctypes/CFFI, and
+Java FFM through the published Java library path.
