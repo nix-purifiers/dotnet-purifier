@@ -19,6 +19,8 @@ def run(name, *command):
     return (out / name).read_text()
 
 
+if run('status.txt', 'git', 'status', '--porcelain').strip():
+    raise SystemExit('native receipts require a clean committed source tree')
 revision = run('revision.txt', 'git', 'rev-parse', 'HEAD').strip()
 subprocess.run(['git', 'archive', '--output', str(out / 'source.tar'), 'HEAD'],
                cwd=root, check=True)
@@ -38,20 +40,26 @@ versions = json.loads(run('sdk-versions.json', 'nix', 'eval', '--json', '--impur
 checks = ['current-app-runs', 'current-app11-runs', 'unit-tests', 'multi-app-runs', 'multi-tests', 'multi-release-publishes',
           'sources-web-runs', 'workloads-wasm-relinked',
           'realworld-fluentvalidation', 'realworld-fluentvalidation-tests']
+# Darwin's binary SDK declares narrow system-service sandbox profiles.
+# Relaxed mode permits those profiles; it still sandboxes ordinary builds.
+sandbox = 'relaxed' if sys.platform == 'darwin' else 'true'
 receipts = {}
 for check in checks:
     ref = f'.#checks.{system}.{check}'
-    run(check + '-derivation.json', 'nix', 'derivation', 'show', ref)
+    derivations = json.loads(run(check + '-derivation.json', 'nix', 'derivation', 'show', ref))
+    derivations = derivations.get('derivations', derivations)
+    if any(d.get('env', {}).get('__noChroot') == '1' for d in derivations.values()):
+        raise SystemExit(f'{check} explicitly disables the sandbox')
     builds = json.loads(run(check + '-build.json', 'nix', 'build', '--no-link',
-                           '--json', '-L', '--option', 'sandbox', 'true', ref))
+                           '--json', '-L', '--option', 'sandbox', sandbox, ref))
     # Force actual execution even when the initial build was substituted.
     run(check + '-rebuild.log', 'nix', 'build', '--no-link', '--rebuild', '-L',
-        '--option', 'sandbox', 'true', ref)
+        '--option', 'sandbox', sandbox, ref)
     paths = [path for build in builds for path in build['outputs'].values()]
     outputs = json.loads(run(check + '-outputs.json', 'nix', 'path-info', '--json', *paths))
     receipts[check] = {'builds': builds, 'outputs': outputs, 'rebuild': 'success'}
 (out / 'receipt.json').write_text(json.dumps({
     'repository': 'nix-purifiers/dotnet-purifier', 'revision': revision,
     'source': metadata, 'system': system, 'sdkVersions': versions,
-    'sandbox': True, 'checks': receipts,
+    'sandbox': sandbox, 'checks': receipts,
 }, indent=2) + '\n')

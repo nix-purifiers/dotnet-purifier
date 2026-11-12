@@ -22,7 +22,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - name: Check all outputs in the Nix sandbox
-        run: nix flake check -L --max-jobs 2 --option sandbox true
+        run: |
+          sandbox=true
+          # Nixpkgs' binary .NET SDKs declare macOS system-service profiles.
+          if [ "$RUNNER_OS" = macOS ]; then sandbox=relaxed; fi
+          nix flake check -L --max-jobs 2 --option sandbox "$sandbox"
       - name: Retain native execution receipts
         run: python3 tests/ci-receipts.py "$RUNNER_TEMP/receipts"
       - uses: actions/upload-artifact@v4
