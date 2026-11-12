@@ -38,7 +38,7 @@ versions = json.loads(run('sdk-versions.json', 'nix', 'eval', '--json', '--impur
     'sdk11 = (p.dotnetCorePackages.buildDotnetSdk ' + str(root / 'tests/toolchains/dotnet11.nix') + ').sdk_11_0.version; '
     'currentRuntime10 = (p.dotnetCorePackages.buildDotnetSdk ' + str(root / 'tests/toolchains/dotnet10-runtime.nix') + ').runtime_10_0.version; '
     'runtime11 = (p.dotnetCorePackages.buildDotnetSdk ' + str(root / 'tests/toolchains/dotnet11.nix') + ').runtime_11_0.version; })'))
-checks = ['current-app-runs', 'current-app11-runs', 'unit-tests', 'multi-app-runs', 'multi-tests', 'multi-release-publishes',
+checks = ['test-network-boundary', 'current-app-runs', 'current-app11-runs', 'unit-tests', 'multi-app-runs', 'multi-tests', 'multi-release-publishes',
           'sources-web-runs', 'workloads-wasm-relinked',
           'realworld-fluentvalidation', 'realworld-fluentvalidation-tests']
 # Darwin's binary SDK declares narrow system-service sandbox profiles.
@@ -58,6 +58,8 @@ for check in checks:
         '--option', 'sandbox', sandbox, ref)
     paths = [path for build in builds for path in build['outputs'].values()]
     outputs = json.loads(run(check + '-outputs.json', 'nix', 'path-info', '--json', *paths))
+    if check == 'test-network-boundary':
+        (out / 'network-boundary.json').write_bytes(pathlib.Path(builds[0]['outputs']['out']).read_bytes())
     receipts[check] = {'builds': builds, 'outputs': outputs, 'rebuild': 'success'}
 (out / 'receipt.json').write_text(json.dumps({
     'repository': 'nix-purifiers/dotnet-purifier', 'revision': revision,

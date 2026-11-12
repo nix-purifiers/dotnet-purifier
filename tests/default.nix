@@ -231,6 +231,10 @@ in
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;
   multi-tests = multi.tests;
+  test-network-boundary = import ./test-network.nix {
+    inherit pkgs;
+    testProject = multi.tests.projects."Greeter.Tests";
+  };
 
   # The executable runs on the .NET runtime and reaches both its project
   # reference and its NuGet dependency.
