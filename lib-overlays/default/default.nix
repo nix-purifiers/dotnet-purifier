@@ -13,8 +13,8 @@
   overlay = final: prev: {
     dotnet-purifier = (prev.dotnet-purifier or { }) // {
       # The lock in memory of the purifier contract, from a build root and
-      # its dotnet-purifier.lock.json (nix/lib/lock.nix).
-      readLock = args: import ../../nix/lib/lock.nix ({ lib = final; } // args);
+      # its dotnet-purifier.lock.json (lib-overlays/default/lock.nix).
+      readLock = args: import ./lock.nix ({ lib = final; } // args);
     };
   };
 

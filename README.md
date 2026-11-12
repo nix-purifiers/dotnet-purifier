@@ -157,7 +157,7 @@ The builder takes `src` and these optional arguments:
 - `fetchers` goes to the fetchers of the purifier library, for a company
   mirror or credentials.
 - `dotnet-sdk`, `nativeBuildInputs`, `buildInputs`, `srcFilter` and
-  `allowStaleLock` are documented in `nix/lib/build-dotnet-project.nix`.
+  `allowStaleLock` are documented in `pkgs/build-dotnet-project/default.nix`.
 
 A flake can instead keep the build external. It keeps the lockfile outside
 `src` and passes it as `lockFile`, and it can keep its own copies of the
