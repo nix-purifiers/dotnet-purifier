@@ -45,6 +45,16 @@ def checked_lock(path):
 # definition checks. Keep all RID/hash bytes in the retained artifacts.
 readers = {'committed': checked_lock(out/'committed-capture.lock.json'),
            'first': checked_lock(out/'capture-1.lock.json')}
+
+
+def shared_library(rid):
+    """The extension of a NativeAOT shared library for a runtime identifier."""
+    for prefix, extension in (('linux', '.so'), ('osx', '.dylib'), ('win', '.dll')):
+        if rid.startswith(prefix + '-'):
+            return extension
+    raise AssertionError('unexpected runtime identifier ' + rid)
+
+
 # Complete the installed CLI's native preparation before capturing the SDK
 # property's JSON stream. Prefetch may itself emit setup output.
 subprocess.run(cli+['prefetch'],cwd=fixture,check=True)
@@ -67,6 +77,12 @@ for index, project in enumerate(first['projects']):
     observations[project['name']] = {'command':command,'properties':properties}
     if old['runtimeIdentifier'] != rid:
         expected_changes.add(('projects',index,'nativePublish','runtimeIdentifier'))
+    # The host operating system names the published library and its debug
+    # symbols, so a capture on another OS records other artifact paths.
+    library = project['assemblyName'] + shared_library(rid)
+    assert library in native['artifacts'], (library, native['artifacts'])
+    if shared_library(old['runtimeIdentifier']) != shared_library(rid):
+        expected_changes.add(('projects',index,'nativePublish','artifacts'))
 assert observations
 if expected_changes:
     expected_changes.add(('contentHash',))
@@ -78,6 +94,8 @@ def differences(a,b,path=()):
     if isinstance(a,dict):
         assert set(a)==set(b), (path,set(a),set(b))
         return set().union(*(differences(a[k],b[k],path+(k,)) for k in a))
+    if isinstance(a,list) and path[-2:]==('nativePublish','artifacts'):
+        return set() if a==b else {path}
     if isinstance(a,list):
         assert len(a)==len(b), path
         return set().union(*(differences(x,y,path+(i,)) for i,(x,y) in enumerate(zip(a,b))))
