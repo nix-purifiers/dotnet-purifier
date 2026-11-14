@@ -19,12 +19,17 @@
   packagesLock,
 }:
 let
-  build = pkgs.callPackage ./build-dotnet-project.nix { inherit purifier; } {
+  build = pkgs.callPackage ./default.nix { inherit purifier; } {
     inherit src lockFile packagesLock;
   };
 in
 {
-  inherit (build) packageFolder sdk release;
+  inherit (build)
+    dependencies
+    packageFolder
+    sdk
+    release
+    ;
   runtimeLibraries = pkgs.symlinkJoin {
     name = "dotnet-purifier-runtime-libraries";
     paths = map pkgs.lib.getLib build.runtimeLibraries;

@@ -1,0 +1,51 @@
+<!-- SPDX-License-Identifier: MIT -->
+<Project>
+  <Import Project="$(PurifierOriginalAfterCommonTargets)" Condition="'$(PurifierOriginalAfterCommonTargets)' != '' And Exists('$(PurifierOriginalAfterCommonTargets)')" />
+  <UsingTask TaskName="PurifierBrowserEndpointTimes" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Endpoints ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <Epoch ParameterType="System.String" Required="true" />
+      <Result ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Globalization" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Xml" />
+      <Using Namespace="System.Xml.Linq" />
+      <Using Namespace="System.Runtime.Serialization.Json" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(Epoch, CultureInfo.InvariantCulture)).UtcDateTime.ToString("R", CultureInfo.InvariantCulture);
+        Result = new Microsoft.Build.Framework.ITaskItem[Endpoints.Length];
+        for (var i = 0; i < Endpoints.Length; i++) {
+          var item = new Microsoft.Build.Utilities.TaskItem(Endpoints[i]);
+          var metadata = item.GetMetadata("ResponseHeaders");
+          if (!string.IsNullOrEmpty(metadata)) {
+            XElement headers;
+            using (var reader = JsonReaderWriterFactory.CreateJsonReader(Encoding.UTF8.GetBytes(metadata), XmlDictionaryReaderQuotas.Max))
+              headers = XElement.Load(reader);
+            foreach (var header in headers.Elements("item")) {
+              if ((string)header.Element("Name") == "Last-Modified") header.Element("Value").Value = timestamp;
+            }
+            using (var stream = new MemoryStream()) {
+              using (var writer = JsonReaderWriterFactory.CreateJsonWriter(stream, Encoding.UTF8, false))
+                headers.WriteTo(writer);
+              item.SetMetadata("ResponseHeaders", Encoding.UTF8.GetString(stream.ToArray()));
+            }
+          }
+          Result[i] = item;
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="PurifierReproducibleBrowserEndpointTimes" BeforeTargets="GenerateStaticWebAssetsPublishManifest" Condition="'$(SOURCE_DATE_EPOCH)' != '' And '@(StaticWebAssetEndpoint)' != ''">
+    <PurifierBrowserEndpointTimes Endpoints="@(StaticWebAssetEndpoint)" Epoch="$(SOURCE_DATE_EPOCH)">
+      <Output TaskParameter="Result" ItemName="_PurifierTimedBrowserEndpoint" />
+    </PurifierBrowserEndpointTimes>
+    <ItemGroup>
+      <StaticWebAssetEndpoint Remove="@(StaticWebAssetEndpoint)" />
+      <StaticWebAssetEndpoint Include="@(_PurifierTimedBrowserEndpoint)" />
+    </ItemGroup>
+  </Target>
+</Project>

@@ -8,9 +8,9 @@
   # from them.
   dotnet-purifier = callPackage ./dotnet-purifier { };
 
-  # The builder (nix/lib/build-dotnet-project.nix), with the shared purifier
+  # The builder (pkgs/build-dotnet-project/default.nix), with the shared purifier
   # library of this flake, `lib.purifier`.
-  buildDotnetProject = callPackage ../nix/lib/build-dotnet-project.nix {
+  buildDotnetProject = callPackage ./build-dotnet-project/default.nix {
     inherit (lib) purifier;
   };
 }

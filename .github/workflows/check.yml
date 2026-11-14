@@ -46,12 +46,14 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
-        fixture: [multi, sources, workloads, update, current, real-world/fluentvalidation]
+        fixture: [multi, sources, workloads, update, current, native42, native43, native-multi, real-world/fluentvalidation]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
+      - name: Select the optional packaged fixture SDK
+        run: bash tests/fixture-sdk.sh '${{ matrix.fixture }}'
       - name: Relock ${{ matrix.fixture }}
         run: |
           lockfile="$GITHUB_WORKSPACE/tests/fixtures/${{ matrix.fixture }}/dotnet-purifier.lock.json"
@@ -73,19 +75,23 @@ jobs:
           if [ "${{ matrix.fixture }}" = multi ]; then
             rm src/App/packages.lock.json
           fi
-          if [ "${{ matrix.fixture }}" = current ]; then
-            export DOTNET_PURIFIER_NIXPKGS="$GITHUB_WORKSPACE/tests/toolchains"
-            DOTNET_PURIFIER_SYSTEM="$(nix eval --raw --impure --expr builtins.currentSystem)"
-            export DOTNET_PURIFIER_SYSTEM
-            export DOTNET_PURIFIER_DEFAULT_SDK=11
-            export DOTNET_PURIFIER_NIX_LIB="$GITHUB_WORKSPACE/nix/lib"
-            export DOTNET_PURIFIER_FLAKE="$GITHUB_WORKSPACE"
-            python3 "$GITHUB_WORKSPACE/cli/dotnet_purifier.py" lock --force --lockfile "$lockfile"
-          else
-            nix run "$GITHUB_WORKSPACE#default" -- lock --force --lockfile "$lockfile"
-          fi
+          nix run "$GITHUB_WORKSPACE#default" -- lock --force --lockfile "$lockfile"
       - name: The lockfile is unchanged
+        if: ${{ !startsWith(matrix.fixture, 'native') }}
         run: git diff --exit-code -- tests
+      - name: Verify the native SDK capture profile
+        if: startsWith(matrix.fixture, 'native')
+        run: |
+          python3 tests/native/relock-profile.py \
+            --repo "$GITHUB_WORKSPACE" --fixture "${{ matrix.fixture }}" \
+            --capture "$GITHUB_WORKSPACE/tests/fixtures/${{ matrix.fixture }}/dotnet-purifier.lock.json" \
+            --out "$RUNNER_TEMP/native-profile"
+      - uses: actions/upload-artifact@v4
+        if: always() && startsWith(matrix.fixture, 'native')
+        with:
+          name: native-capture-${{ matrix.runner }}-${{ matrix.fixture }}
+          path: ${{ runner.temp }}/native-profile
+          if-no-files-found: error
       # With --tool-lockfile, a lock into a directory that does not exist
       # yet starts from the packages.lock.json in the tree, writes it there,
       # and leaves the tree and the lockfile as they are.
@@ -110,7 +116,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: |
           system="$(nix eval --raw --impure --expr builtins.currentSystem)"
-          for check in multi-app multi-greeter sources-web; do
+          for check in multi-app multi-greeter sources-web browser-projections native-ffi native-multi; do
             nix build --no-link -L ".#checks.$system.$check"
             nix build --no-link --rebuild ".#checks.$system.$check"
           done
@@ -127,6 +133,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
+      - name: Select the optional packaged fixture SDK
+        run: bash tests/fixture-sdk.sh
       - name: Prefetch
         working-directory: tests/fixtures/multi
         run: |
@@ -156,6 +164,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
+      - name: Select the optional packaged fixture SDK
+        run: bash tests/fixture-sdk.sh
       - working-directory: tests/fixtures/update
         run: |
           nix build --out-link "$RUNNER_TEMP/cli" "$GITHUB_WORKSPACE#default"

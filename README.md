@@ -22,6 +22,13 @@ test and editor commands with this setup. Nix provides the locked
 dependencies; the development commands above run outside the Nix sandbox.
 No project Nix files are needed for this workflow.
 
+Keep the project's existing .NET installation on `PATH`, or set
+`DOTNET_PURIFIER_DOTNET` to its `dotnet` executable. Local capture,
+prefetch and development use that installation and its `global.json`
+selection. They do not install a Nix SDK or replace the project's runtime.
+Capture and restore require an installed SDK with the capabilities the
+project uses; a runtime-only installation cannot run MSBuild.
+
 Sandboxed builds of the whole project are an optional
 [next step](#building-the-project-with-nix).
 
@@ -44,10 +51,10 @@ dotnet-purifier dotnet run \
   --project src/App
 ```
 
-Every restore reads only the locked packages, with the locked SDK and the
-runtime of every target framework of the build, so `dotnet test` runs each
-framework's tests. `dotnet tool restore` and `dotnet workload restore` read
-the locked packages too.
+Every restore reads only the locked packages, using the project's installed
+SDK and runtimes. Install any framework runtimes that its tests require.
+`dotnet tool restore` and `dotnet workload restore` read the locked packages
+too. Runtime versions recorded by tests are evidence, not a local allowlist.
 
 To add or upgrade a package, edit the project file, or use the SDK's own
 commands with the network, then relock:
@@ -157,7 +164,7 @@ The builder takes `src` and these optional arguments:
 - `fetchers` goes to the fetchers of the purifier library, for a company
   mirror or credentials.
 - `dotnet-sdk`, `nativeBuildInputs`, `buildInputs`, `srcFilter` and
-  `allowStaleLock` are documented in `nix/lib/build-dotnet-project.nix`.
+  `allowStaleLock` are documented in `pkgs/build-dotnet-project/default.nix`.
 
 A flake can instead keep the build external. It keeps the lockfile outside
 `src` and passes it as `lockFile`, and it can keep its own copies of the
@@ -203,25 +210,23 @@ nix shell 'github:nix-purifiers/dotnet-purifier'
 dotnet-purifier prefetch
 ```
 
-`prefetch` builds the locked packages, the SDK with every runtime the build
-targets and the libraries a self-contained runtime loads. It keeps them
-with garbage-collector roots in the `.dotnet-purifier/` directory next to
-the lockfile. It installs the packages
+`prefetch` fetches the locked artifacts through Nix without realizing a
+project SDK. It keeps those dependency roots and the materialized package
+folder in `.dotnet-purifier/` next to the lockfile. It installs the packages
 into your NuGet package folder, restores the local tools and the
 workloads, and restores every project. Afterwards `dotnet-purifier dotnet`
-uses those store paths without evaluating Nix, so the development loop works
-with the network cut off. When the lock changes, the next
-`dotnet-purifier dotnet` prefetches again.
+uses the same installed SDK and cached packages, so the development loop
+works with the network cut off. When the lock or selected installation
+changes, the next `dotnet-purifier dotnet` prefetches again. Prefetch does
+not supply missing runtimes or native ABI libraries by replacing the host.
 
 ## Editor
 
 After a prefetch, the packages are in your NuGet package folder and every
 project is restored, so a language server that reads a project through
 MSBuild (the Roslyn language server, csharp-ls or OmniSharp) works with no
-network. Run it with the locked SDK, which `prefetch` links at
-`.dotnet-purifier/sdk` next to the lockfile: put `.dotnet-purifier/sdk/bin`
-first on its `PATH` and set `DOTNET_ROOT` to
-`.dotnet-purifier/sdk/share/dotnet`. Navigation into
+network. Run it with the same installed SDK used for capture and prefetch.
+Navigation into
 a package's code decompiles it locally; source files that SourceLink
 downloads need the network.
 
@@ -272,10 +277,12 @@ A lock run stops, naming the reason, on these:
 - **Windows and macOS target frameworks.** They need their platform's SDK,
   which no Nix build has.
 
-Other limits: a lock is made with the nixpkgs SDK of the major version
-`global.json` names (10 when there is none), and a Nix build uses the SDK of
-that major version from your nixpkgs, warning when the patch version
-differs. Workload tools run interactively on NixOS with `programs.nix-ld`.
+For full sandboxed builds, the default toolchain is the nixpkgs SDK of the
+major version recorded in the lock, warning when its patch differs. Supply
+an immutable `dotnet-sdk` to the builder when needed. Local capture does
+not promise that a host-only SDK can be replayed in a Nix sandbox; the pure
+build's toolchain and native dependencies must be provided separately.
+Workload tools run interactively on NixOS with `programs.nix-ld`.
 
 ## Examples
 
@@ -320,3 +327,100 @@ FluentValidation as the `src` of the flake.
 
 The purifier idea was inspired by nixcloud's
 [cargo (libnix)](https://github.com/nixcloud/cargo).
+
+### NativeAOT shared-library projections
+
+A class library which declares `PublishAot=true` and `NativeLib=Shared` can
+be selected explicitly after capture:
+
+```nix
+let project = buildDotnetProject {
+  src = ./my-project;
+  dotnet-sdk = myImmutableSdk;
+  nativeProducts.answer = {
+    project = "Answer";
+    exports = [ "native_answer" ];
+  };
+}; in project.projections.answer
+```
+
+Capture performs the ordinary managed build or NuGet pack and a separate
+native publish. The lock records the native output and captures native
+compiler and target-runtime packages for the supported SDK hosts. The
+ordinary `packages` and `release` outputs retain their existing meaning;
+`nativePackages.<name>` is the selected native producer. The `native`,
+`python-ffi`, and `java-ffi` projections use that producer's actual shared
+library. The selected immutable SDK drives project compilation and the
+metadata inspector, including the project's `global.json` SDK selection.
+
+Each advertised entrypoint must belong to the selected managed PE assembly,
+have an `UnmanagedCallersOnly` export declaration, and be defined by the
+native binary for the selected platform. The producer retains the managed
+input, native compiler response files, and original native publish tree.
+Original and packaged native-library hashes distinguish any Nix relocation.
+
+Fixed-width scalar and unmanaged pointer signatures also provide derived C
+headers and CFFI declarations under `include/`, plus a pkg-config file under
+`lib/pkgconfig/`. Aggregate layouts and other signatures remain explicit PE
+metadata; `headerUnsupportedExports` identifies exports without an automatic
+header. Consumers supply compatible signatures and marshaling. No managed
+DLL is treated as a native library.
+
+NativeAOT initializes its runtime through native library loading and entry
+stubs. Keep libraries loaded for process lifetime: unloading is unsupported.
+The checks exercise independent source revisions, a captured NuGet library,
+managed allocation and garbage collection, C/C++ callers, ctypes/CFFI, and
+Java FFM through the published Java library path.
+
+### Browser WebAssembly resources
+
+Select captured browser projects explicitly when building:
+
+```nix
+(buildDotnetProject {
+  src = ./my-project;
+  browserTargets.MyBrowserApp.webjar = {
+    groupId = "org.example";
+    artifactId = "my-browser-app";
+    version = "1.0.0";
+  };
+}).projections.MyBrowserApp
+```
+
+The result provides `web`, `resources`, and `java-resources` views of the
+complete native `dotnet publish` `wwwroot` tree, preserving the loader,
+managed WebAssembly assemblies, runtime, native relinked modules, compressed
+variants, and their relative paths. `web.documentRoot` is the serving root;
+`java-resources.classPath` is its resource JAR. Optional `webjar` coordinates
+also provide `maven` and `ivy` repositories. Use an empty target set value
+(`browserTargets.MyBrowserApp = { };`) for resource views alone.
+
+Only captured `browser-*` executable projects qualify. WASI executables and
+managed desktop executables do not expose this browser projection. The
+projection preserves the application's own published assets; it does not
+supply an HTML entrypoint or rewrite boot manifests. The existing raw
+`packages` outputs remain available. Explicit `dotnet-sdk` selection applies
+to the producer of every view.
+
+Sandboxed WebAssembly publish also supplies `SOURCE_DATE_EPOCH` to native
+MSBuild static-asset endpoint generation. This makes the generated HTTP
+`Last-Modified` headers reproducible. The native task serializes its own
+manifest; published manifests and browser asset bodies are not rewritten.
+Existing environment-selected common targets are imported first, and explicit
+project overrides of `CustomAfterMicrosoftCommonTargets` retain precedence.
+
+Capture and sandboxed workload builds use a private SDK home. When the
+project does not declare `sdk.workloadVersion` in `global.json`, SDKs that
+support workload sets are configured through their native CLI to use bundled
+manifests. This keeps capture consistent with the manifests used by the pure
+builder, even when newer workload sets appear on the feed. The capability is
+detected from the selected SDK, without a runtime-version allowlist. Explicit
+project workload-set declarations retain precedence; capturing their separate
+downloaded manifest set remains an open integration case.
+
+A NativeAOT capture whose `runtimeIdentifierSource` is `sdk-host` retains the
+capture SDK’s observed host RID. Builds query the selected SDK for its current
+host RID. Capture conformance keeps both raw locks and their native SDK
+observations, validates their hashes through the Nix reader, and requires
+byte-identical repeated captures within each SDK profile. Cross-host captures
+can therefore retain different RIDs and content hashes.
