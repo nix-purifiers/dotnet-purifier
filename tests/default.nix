@@ -287,7 +287,9 @@ in
         </Project>
         EOF
         echo 'System.Console.WriteLine(Example.Greeter.Greeting.For("Grace", 1));' > consumer/Program.cs
-        dotnet build consumer -p:RestoreSources="$PWD/feed;${multi.packageFolder}" -o out
+        # Without a PID namespace, as on Darwin, Nix waits for every process
+        # that holds the build log open, so no build server may outlive dotnet.
+        dotnet build consumer --disable-build-servers -p:RestoreSources="$PWD/feed;${multi.packageFolder}" -o out
         output="$(dotnet out/Consumer.dll)"
         test "$output" = "Hello, Grace! You have 1 message."
         touch "$out"
