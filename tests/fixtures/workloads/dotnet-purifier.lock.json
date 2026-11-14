@@ -153,18 +153,6 @@
       "hash": "sha512-5k/K6981Uzk0JnXIwy7c2ziDO6oQZ3wRrjtJBXMkdLmLKrXEE6KmCwTrbwKFA/Cy58fC/GcxrGvwgM6m7I8Vtg=="
     },
     {
-      "path": "microsoft.net.sdk.webassembly.pack/10.0.15/microsoft.net.sdk.webassembly.pack.10.0.15.nupkg",
-      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.sdk.webassembly.pack/10.0.15/microsoft.net.sdk.webassembly.pack.10.0.15.nupkg",
-      "mirrors": [],
-      "hash": "sha512-sPAdbG/myETd/zjCLatWgAyas/7a+Z8W7p09JVakswEOVfZjLkSNTLmSGbH507cFNR0YbtTGwj3z0z3/ZYH02g=="
-    },
-    {
-      "path": "microsoft.netcore.app.ref/10.0.15/microsoft.netcore.app.ref.10.0.15.nupkg",
-      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/10.0.15/microsoft.netcore.app.ref.10.0.15.nupkg",
-      "mirrors": [],
-      "hash": "sha512-fS+R/OlE7AEqsnQ5FzHYUAR5dw4l3jF4eXpmk8dCCas0BFRd4LNlpzZ4BYcLoOOY3IM7JuEoF/1gwdgr8rfF8Q=="
-    },
-    {
       "path": "microsoft.netcore.app.runtime.aot.linux-arm64.cross.browser-wasm/10.0.14/microsoft.netcore.app.runtime.aot.linux-arm64.cross.browser-wasm.10.0.14.nupkg",
       "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.aot.linux-arm64.cross.browser-wasm/10.0.14/microsoft.netcore.app.runtime.aot.linux-arm64.cross.browser-wasm.10.0.14.nupkg",
       "mirrors": [],
@@ -200,5 +188,5 @@
   ],
   "localPackages": [],
   "sdkPackages": [],
-  "contentHash": "sha256-pnnU5o2VNmFgWq2neKb6WicLYqNxGogcGzZj5YAFLeQ="
+  "contentHash": "sha256-JdUHQuL4duHlauTxkUL/VAWBc3vdmYl5TcUGvwOcPc4="
 }
