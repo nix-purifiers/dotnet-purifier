@@ -44,6 +44,20 @@ let
     lockFile = ./real-world/fluentvalidation/dotnet-purifier.lock.json;
   };
 
+  # Preserve test-host diagnostics on failures in the controlled fixtures.
+  diagnoseTest = import ./test-diagnostics.nix { inherit lib; };
+  multiTestProjects = lib.mapAttrs (_: diagnoseTest) multi.tests.projects;
+  fluentvalidationTestProjects = lib.mapAttrs (_: diagnoseTest) fluentvalidation.tests.projects;
+
+  # Released .NET 11, independent of the RC in the primary package set.
+  # Exercise the public builder's toolchain override on maintained TFMs.
+  currentToolchain = import ./toolchains/released.nix { inherit (pkgs) dotnetCorePackages; };
+  current =
+    (build.override {
+      dotnetCorePackages = pkgs.dotnetCorePackages // currentToolchain;
+    })
+      { src = ./fixtures/current; };
+
   # A lockfile changed by `changes`, with its content hash computed again,
   # so that it fails only for the change.
   multiLock = lib.importJSON ./fixtures/multi/dotnet-purifier.lock.json;
@@ -212,9 +226,23 @@ in
   conformance-external = external.packages.App;
   conformance-external-packages-lock = externalPackagesLock.packages.App;
 
+  current-app = current.packages.App;
+  current-app11 = current.packages.App11;
+  current-app-runs =
+    prints "current-app-runs" "${current.packages.App}/bin/App"
+      ''{"runtime":"10.0.15","value":"locked"}'';
+  current-app11-runs =
+    prints "current-app11-runs" "${current.packages.App11}/bin/App11"
+      ''{"runtime":"11.0.0","value":"locked"}'';
+
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;
   multi-tests = multi.tests;
+  multi-tests-native = multiTestProjects."Greeter.Tests";
+  test-network-boundary = import ./test-network.nix {
+    inherit pkgs;
+    testProject = multi.tests.projects."Greeter.Tests";
+  };
 
   # The executable runs on the .NET runtime and reaches both its project
   # reference and its NuGet dependency.
@@ -259,7 +287,9 @@ in
         </Project>
         EOF
         echo 'System.Console.WriteLine(Example.Greeter.Greeting.For("Grace", 1));' > consumer/Program.cs
-        dotnet build consumer -p:RestoreSources="$PWD/feed;${multi.packageFolder}" -o out
+        # Without a PID namespace, as on Darwin, Nix waits for every process
+        # that holds the build log open, so no build server may outlive dotnet.
+        dotnet build consumer --disable-build-servers -p:RestoreSources="$PWD/feed;${multi.packageFolder}" -o out
         output="$(dotnet out/Consumer.dll)"
         test "$output" = "Hello, Grace! You have 1 message."
         touch "$out"
@@ -298,6 +328,7 @@ in
   realworld-fluentvalidation-benchmarks =
     fluentvalidation.packages."FluentValidation.Tests.Benchmarks";
   realworld-fluentvalidation-tests = fluentvalidation.tests;
+  realworld-fluentvalidation-tests-native = fluentvalidationTestProjects."FluentValidation.Tests";
 }
 // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
   sources-standalone = sources.packages.Standalone;

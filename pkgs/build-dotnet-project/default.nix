@@ -490,6 +490,10 @@ let
     p:
     mkBuild p {
       dotnetSdk = testSdk p;
+      # VSTest's test host uses a localhost TCP channel. Permit loopback
+      # on Darwin, where the default sandbox forbids even local sockets.
+      # External networking remains denied by the Nix sandbox.
+      __darwinAllowLocalNetworking = stdenv.hostPlatform.isDarwin;
       installPhase = ''
         runHook preInstall
         ${dotnetSetup}
