@@ -2,6 +2,12 @@
 """Cross-OS artifact differences must not hide unrelated published files."""
 import importlib.util
 import os
+import copy
+import json
+from pathlib import Path
+import runpy
+import tempfile
+from unittest.mock import patch
 import unittest
 
 spec = importlib.util.spec_from_file_location(
@@ -57,3 +63,72 @@ class NativeArtifactProfile(unittest.TestCase):
                                ('win-x64', ['Answer.dll', 'Other.pdb'])]:
             with self.subTest(rid=rid), self.assertRaises(AssertionError):
                 profile.validate_artifacts('Answer', rid, artifacts)
+
+
+class NativeRelockIntegration(unittest.TestCase):
+    """Exercise the real comparison script with external commands simulated."""
+
+    def run_profile(self, bad_inventory=None):
+        old = {'sdk': {'version': 'test-sdk'}, 'contentHash': 'old', 'projects': [{
+            'name': 'native', 'assemblyName': 'Answer', 'path': 'Answer.csproj',
+            'nativePublish': {'runtimeIdentifierSource': 'sdk-host',
+                              'runtimeIdentifier': 'linux-x64',
+                              'artifacts': ['Answer.so', 'Answer.so.dbg']}}]}
+        first = copy.deepcopy(old)
+        first['contentHash'] = 'new'
+        first['projects'][0]['nativePublish'].update(
+            runtimeIdentifier='osx-arm64', artifacts=NativeArtifactProfile().darwin())
+        if bad_inventory:
+            target = old if bad_inventory == 'committed' else first
+            target['projects'][0]['nativePublish']['artifacts'].append('unrelated-extra.bin')
+        old_bytes = json.dumps(old).encode()
+        first_bytes = json.dumps(first).encode()
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            fixture = repo / 'tests/fixtures/native42'
+            fixture.mkdir(parents=True)
+            capture = fixture / 'dotnet-purifier.lock.json'
+            capture.write_bytes(first_bytes)
+            out = repo / 'out'
+
+            def check_output(command, **kwargs):
+                if command[0] == 'git':
+                    return old_bytes
+                if command[:2] == ['nix', 'eval']:
+                    if command[-1] == 'builtins.currentSystem':
+                        return 'aarch64-darwin'
+                    return json.dumps({'problems': [], 'outputs': ['native']})
+                if 'msbuild' in command:
+                    return json.dumps({'Properties': {'NETCoreSdkVersion': 'test-sdk',
+                        'NETCoreSdkPortableRuntimeIdentifier': 'osx-arm64'}})
+                if command[:2] == ['nix', 'build']:
+                    return '/nix/store/simulated-native-replay\n'
+                raise AssertionError(('unexpected external command', command))
+
+            def run(command, **kwargs):
+                if 'lock' in command:
+                    Path(command[-1]).write_bytes(first_bytes)
+                else:
+                    assert command[-1] == 'prefetch', command
+
+            argv = ['relock-profile.py', '--repo', str(repo), '--fixture', 'native42',
+                    '--capture', str(capture), '--out', str(out)]
+            with patch('sys.argv', argv), patch.dict('sys.modules', artifact_profile=profile), \
+                 patch('subprocess.check_output', side_effect=check_output), \
+                 patch('subprocess.run', side_effect=run):
+                runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
+            return json.loads((out / 'verification.json').read_text())
+
+    def test_cross_os_profile_reaches_repeat_reader_and_replay(self):
+        result = self.run_profile()
+        self.assertTrue(result['repeatedCaptureByteIdentical'])
+        self.assertEqual(set(result['nativeNixReaders']), {'committed', 'first', 'second'})
+        self.assertIn(['projects', 0, 'nativePublish', 'artifacts'], result['changedPaths'])
+        self.assertEqual(result['capturedLockNativeReplay']['outputs'],
+                         ['/nix/store/simulated-native-replay'])
+
+    def test_extra_artifact_in_either_inventory_stops_comparison(self):
+        for inventory in ('committed', 'captured'):
+            with self.subTest(inventory=inventory), self.assertRaisesRegex(
+                    AssertionError, 'unexpected native artifacts'):
+                self.run_profile(inventory)
