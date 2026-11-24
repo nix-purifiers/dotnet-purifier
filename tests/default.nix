@@ -212,6 +212,7 @@ in
         );
         DOTNET_PURIFIER_NATIVE_LINK_CONTEXT = ../pkgs/dotnet-native-products/link-context.py;
         DOTNET_PURIFIER_RUNTIME_IDENTITY_HELPER = ./runtime-identity.py;
+        DOTNET_PURIFIER_BROWSER_RESOLVER = ./browser/resolve.py;
         DOTNET_PURIFIER_NATIVE_CACHE_HELPER = ./native/cache_prerequisites.py;
         DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE = ./native/relock-profile.py;
         DOTNET_PURIFIER_NATIVE_ARTIFACT_HELPER = ./native/artifact_profile.py;

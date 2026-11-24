@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -23,7 +24,13 @@ configurations { assets }
 dependencies { assets(selected.coordinate) }
 tasks.register('resolveAssets') { doLast { new File(selected.report).text=configurations.assets.singleFile.canonicalPath } }
 ''')
-subprocess.run(['gradle','--offline','--no-daemon','--console=plain','--stacktrace','resolveAssets'],cwd=project,check=True,timeout=180)
+# Java's user.home need not follow HOME. Keep Gradle's native extraction and
+# user caches inside this disposable consumer project, including on Darwin.
+gradle_home=project/'gradle-user-home'
+gradle_home.mkdir()
+environment=os.environ.copy()
+environment['GRADLE_USER_HOME']=str(gradle_home)
+subprocess.run(['gradle','--offline','--no-daemon','--console=plain','--stacktrace','resolveAssets'],cwd=project,env=environment,check=True,timeout=180)
 resolved=Path(report.read_text())
 assert hashlib.sha256(resolved.read_bytes()).digest()==hashlib.sha256(poms[0].with_suffix('.jar').read_bytes()).digest()
 Path(sys.argv[2]).write_text(str(resolved))
