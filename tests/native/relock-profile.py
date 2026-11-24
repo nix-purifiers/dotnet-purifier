@@ -7,6 +7,8 @@ from pathlib import Path
 import platform
 import subprocess
 
+from artifact_profile import shared_library, validate_artifacts
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--repo', type=Path, required=True)
 parser.add_argument('--fixture', choices=['native42', 'native43', 'native-multi'], required=True)
@@ -47,14 +49,6 @@ readers = {'committed': checked_lock(out/'committed-capture.lock.json'),
            'first': checked_lock(out/'capture-1.lock.json')}
 
 
-def shared_library(rid):
-    """The extension of a NativeAOT shared library for a runtime identifier."""
-    for prefix, extension in (('linux', '.so'), ('osx', '.dylib'), ('win', '.dll')):
-        if rid.startswith(prefix + '-'):
-            return extension
-    raise AssertionError('unexpected runtime identifier ' + rid)
-
-
 # Complete the installed CLI's native preparation before capturing the SDK
 # property's JSON stream. Prefetch may itself emit setup output.
 subprocess.run(cli+['prefetch'],cwd=fixture,check=True)
@@ -79,8 +73,9 @@ for index, project in enumerate(first['projects']):
         expected_changes.add(('projects',index,'nativePublish','runtimeIdentifier'))
     # The host operating system names the published library and its debug
     # symbols, so a capture on another OS records other artifact paths.
-    library = project['assemblyName'] + shared_library(rid)
-    assert library in native['artifacts'], (library, native['artifacts'])
+    validate_artifacts(golden['projects'][index]['assemblyName'],
+                       old['runtimeIdentifier'], old['artifacts'])
+    validate_artifacts(project['assemblyName'], rid, native['artifacts'])
     if shared_library(old['runtimeIdentifier']) != shared_library(rid):
         expected_changes.add(('projects',index,'nativePublish','artifacts'))
 assert observations
