@@ -64,6 +64,8 @@
   openssl,
   zlib,
   clang,
+  apple-sdk,
+  swiftPackages,
   krb5,
 }:
 {
@@ -581,7 +583,10 @@ let
       buildInputs = [
         zlib
         stdenv.cc.cc.lib
-      ];
+      ]
+      # The macOS SDK contains overlay stubs, but Swift's core stub is
+      # supplied by the standard-library development output.
+      ++ lib.optional stdenv.hostPlatform.isDarwin swiftPackages.stdlib.dev;
       runtimeDependencies = map lib.getLib runtimeLibraries;
       dontAutoPatchelf = true;
       dontPatchELF = true;
@@ -605,6 +610,11 @@ let
       installPhase = ''
         runHook preInstall
         ${dotnetSetup}
+        ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          # NativeAOT asks for Swift overlays under /usr/lib/swift. Use
+          # the immutable SDK's overlay stubs alongside the core input.
+          export NIX_LDFLAGS="''${NIX_LDFLAGS-} -L${apple-sdk.sdkroot}/usr/lib/swift"
+        ''}
         hostRid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
         compilerPackages=$(python3 ${../dotnet-native-products/prepare-tools.py} "$NUGET_PACKAGES" "$hostRid")
         ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$compilerPackages"''}
