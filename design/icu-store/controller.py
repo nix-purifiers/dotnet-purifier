@@ -67,7 +67,7 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
                    sampleIntervalSeconds=interval, psDeadlineSeconds=1, terminationGraceSeconds=5),
                    maxObservedRssBytes=0, maxObservedProcesses=0, maxObservedScratchBytes=0,
                    samples=0, stopReason=None,
-                   scope='Polled controller bounds, not hard daemon/OS quotas; only owned session is stopped')
+                   scope='Polled controller bounds, not hard daemon/OS quotas; only owned inherited process group is stopped; group-escaping descendants are not covered')
     provider = Path(ps).resolve(strict=True)
     with provider.open('rb') as file:
         data = file.read(16 * 1024**2 + 1)
@@ -86,7 +86,7 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
         receipt['cwd'] = str(work)
         child = subprocess.Popen(command, cwd=work, env=env, start_new_session=True,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        receipt['ownedSession'] = child.pid
+        receipt['ownedProcessGroup'] = child.pid
         reason = None
         next_sample = started
         try:
@@ -132,8 +132,9 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
             reason = 'monitor-error'
             receipt['monitorError'] = str(error)[:2048]
         finally:
-            # Session was created by this controller; no external process IDs or
-            # process-name matching are used for signalling.
+            # Process group was created by this controller; no external process IDs
+            # or name matching are used. A descendant that changes its process
+            # group/session is outside this diagnostic accounting/cleanup.
             kill_group(child.pid)
             try:
                 receipt['exitCode'] = child.wait(timeout=5)

@@ -22,13 +22,17 @@ No culture/sorting/CLDR/ABI compatibility or product fix follows from that alone
 The App inventory is limited to 16 MiB and 2,048 entries; four copies total at
 most 64 MiB. ICU files are symlinks into the immutable store. Each child has a
 15-second/64-KiB combined-output bound; runtime identity has two such commands.
-An outer controller starts its own diagnostic session before imports, runtime
+An outer controller starts a new session and process group before imports, runtime
 identity capture, dependency inspection and case execution. It polls scratch
-(128 MiB), aggregate resident memory (2 GiB) and owned-session processes (8),
+(128 MiB), aggregate resident memory (2 GiB) and inherited-process-group members (8),
 with a 120-second deadline and 512-KiB helper output cap. Sampling uses only the
 declared Apple `ps` output, with numeric fields and a one-second/256-KiB bound;
-only owned-session rows are retained. Missing/denied/malformed sampling is a
-failure. Only the controller-created session is signalled, including descendants.
+only inherited-process-group rows are retained. Missing/denied/malformed sampling is a
+failure. Only the controller-created process group is signalled. The local descendant
+cleanup test covers inherited group membership. Descendants that change group
+or session escape this accounting/cleanup; there is no whole-session or general
+process-tree containment claim. The fixed probe and fixture App do not request
+daemonization or group/session changes.
 
 These are polled controller/input bounds, not hard OS or Nix daemon quotas.
 A sample may take one second; termination has a five-second allowance. Setup and
