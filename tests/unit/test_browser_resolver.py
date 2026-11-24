@@ -26,8 +26,12 @@ class BrowserResolver(unittest.TestCase):
                 if inherited_home is not None:
                     environment['GRADLE_USER_HOME'] = inherited_home
                 def gradle(argv, **kwargs):
-                    self.assertEqual(argv, ['gradle','--offline','--no-daemon','--console=plain','--stacktrace','resolveAssets'])
                     project = root/'gradle-consumer'
+                    diagnostics = project/'cache-diagnostics.gradle'
+                    self.assertEqual(argv, ['gradle','--offline','--no-daemon','--console=plain','--stacktrace','--init-script',str(diagnostics),'resolveAssets'])
+                    self.assertIn('gradle.gradleUserHomeDir.absolutePath', diagnostics.read_text())
+                    self.assertIn('configuredNativeDirectory', diagnostics.read_text())
+                    self.assertNotIn('GRADLE_OPTS', diagnostics.read_text())
                     self.assertEqual(kwargs['cwd'], project)
                     self.assertTrue(kwargs['check'])
                     self.assertEqual(kwargs['timeout'], 180)
