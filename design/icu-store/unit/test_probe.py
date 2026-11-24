@@ -46,6 +46,21 @@ class BoundedProbe(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 probe.clone(source, root / 'changed', inventory)
 
+    def test_malformed_success_output_remains_retained_negative_evidence(self):
+        row = {'exitCode': 0, 'stopReason': None, 'output': 'unexpected non-JSON output'}
+        result = probe.classify(row)
+        self.assertIs(result, row)
+        self.assertFalse(result['expectedAppResult'])
+        self.assertEqual(result['output'], 'unexpected non-JSON output')
+        self.assertIn('parseError', result)
+
+    def test_json_is_not_success_after_nonzero_exit_or_output_limit(self):
+        text = '{"runtime":"10.0.15","value":"locked"}'
+        for code, reason, expected in ((0, None, True), (1, None, False), (0, 'output-limit', False)):
+            with self.subTest(code=code, reason=reason):
+                result = probe.classify({'exitCode': code, 'stopReason': reason, 'output': text})
+                self.assertEqual(result['expectedAppResult'], expected)
+
     def test_input_symlink_is_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             (Path(root) / 'App.dll').symlink_to('/not-followed')

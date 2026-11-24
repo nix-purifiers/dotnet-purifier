@@ -59,6 +59,18 @@ def run(argv, cwd, env, timeout=15, limit=65536):
                 output=output.decode('utf-8', errors='replace'))
 
 
+def classify(row):
+    row['expectedAppResult'] = False
+    if row['exitCode'] == 0 and row['stopReason'] is None:
+        try:
+            row['parsedOutput'] = json.loads(row['output'])
+        except json.JSONDecodeError as error:
+            row['parseError'] = str(error)
+        else:
+            row['expectedAppResult'] = row['parsedOutput'] == {'runtime': '10.0.15', 'value': 'locked'}
+    return row
+
+
 def inventory(directory):
     files = {}
     size = 0
@@ -152,11 +164,8 @@ def probe(args):
                            selectedEnvironment={'DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU': app_local})
                 row.update(run([args.dotnet, str(directory / 'App.dll')], directory, env,
                                timeout=min(15, 120 - (time.monotonic() - started))))
-                row['expectedAppResult'] = False
-                if row['exitCode'] == 0 and row['stopReason'] is None:
-                    row['parsedOutput'] = json.loads(row['output'])
-                    row['expectedAppResult'] = row['parsedOutput'] == {'runtime': '10.0.15', 'value': 'locked'}
                 receipt['cases'].append(row)
+                classify(row)
                 save()
                 # Logs survive a failure elsewhere in flake-check; JSON is retained
                 # in the successful diagnostic output even for negative cases.
