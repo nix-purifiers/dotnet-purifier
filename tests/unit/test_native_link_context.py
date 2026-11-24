@@ -25,7 +25,7 @@ class NativeDeployment(unittest.TestCase):
     def test_lower_target_is_recorded_without_claiming_lower_runtime_support(self):
         result = link.assess(self.context(), 'clang Answer.o --target=arm64-apple-macos12.0')
         self.assertEqual(result['linkTargetMacOS'], '12.0')
-        self.assertEqual(result['effectiveMinimumMacOS'], '14.0.0')
+        self.assertEqual(link.version(result['effectiveMinimumMacOS']), (14, 0, 0))
         self.assertFalse(result['linkTargetCoversDependencies'])
         self.assertFalse(result['lowerTargetRuntimeCoverageClaimed'])
         observed = link.runtime_assessment(result, '15.7.2')
