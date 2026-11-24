@@ -43,6 +43,13 @@ class NativeDeployment(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'dependencies exceed'):
             link.assess(context, '--target=arm64-apple-macos12.0')
 
+    def test_explicit_higher_project_target_remains_a_runtime_requirement(self):
+        result = link.assess(self.context(), '--target=arm64-apple-macos15.0')
+        self.assertEqual(result['effectiveMinimumMacOS'], '15.0')
+        with self.assertRaisesRegex(AssertionError, 'runtime host below'):
+            link.runtime_assessment(result, '14.7')
+        self.assertEqual(link.runtime_assessment(result, '15.7')['executedHostMacOS'], '15.7')
+
     def test_ambiguous_or_missing_actual_target_is_rejected(self):
         for log in ('clang Answer.o', '--target=arm64-apple-macos12.0 --target=arm64-apple-macos14.0'):
             with self.subTest(log=log), self.assertRaisesRegex(AssertionError, 'ambiguous or absent'):

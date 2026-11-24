@@ -89,11 +89,13 @@ def assess(context, log):
     targets = sorted(set(re.findall(r'--target=(?:arm64|aarch64|x86_64)-apple-macos([0-9.]+)', log)), key=version)
     assert len(targets) == 1, ('ambiguous or absent actual link target', targets)
     minimum = max((row['minimumMacOS'] for row in context['dependencies']), key=version)
-    effective = max((targets[0], minimum), key=version)
-    # Do not alter Apple's target. Check the dependency requirement against the
-    # declared Nix platform and report the lower target as insufficient by itself.
-    assert version(context['nixMinimumMacOS']) >= version(effective), (
-        'dependencies exceed Nix platform minimum', context['nixMinimumMacOS'], effective)
+    declared = max((targets[0], context['nixMinimumMacOS']), key=version)
+    effective = max((declared, minimum), key=version)
+    # Do not alter Apple's target. A dependency may not silently exceed both
+    # the Nix baseline and the project's explicit target. A higher explicit
+    # project target remains valid and is included in the runtime requirement.
+    assert version(declared) >= version(minimum), (
+        'dependencies exceed declared platform/project minimum', declared, minimum)
     return {'linkTargetMacOS': targets[0], 'dependencyMinimumMacOS': minimum,
             'effectiveMinimumMacOS': effective, 'nixMinimumMacOS': context['nixMinimumMacOS'],
             'linkTargetCoversDependencies': version(targets[0]) >= version(minimum),
