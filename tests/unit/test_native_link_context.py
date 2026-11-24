@@ -27,6 +27,16 @@ class NativeDeployment(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, 'unexpected strip provider'):
                 link.strip_provider('/expected/strip', '1010.6')
 
+    def test_strip_provider_hashes_actual_selected_bytes(self):
+        expected = Path('/nix/store/provider/bin/strip')
+        with patch.object(link.shutil, 'which', return_value='/nix/store/selector/bin/strip'), \
+             patch.object(link.Path, 'resolve', return_value=expected), \
+             patch.object(link.Path, 'open', return_value=io.BytesIO(b'provider bytes')):
+            result = link.strip_provider(expected, '1010.6')
+        self.assertEqual(result['resolved'], str(expected))
+        self.assertEqual(result['sha256'], link.hashlib.sha256(b'provider bytes').hexdigest())
+        self.assertEqual(result['declaredPackageVersion'], '1010.6')
+
     def context(self):
         return {'nixMinimumMacOS': '14.0', 'dependencies': [
             {'path': '/nix/store/icu/lib/libicucore.A.dylib', 'minimumMacOS': '14.0.0'}]}

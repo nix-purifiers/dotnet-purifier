@@ -12,6 +12,14 @@ import tempfile
 assert sys.platform == 'darwin', 'strip evidence requires native Darwin'
 provider = Path(sys.argv[1]).resolve(strict=True)
 assert str(provider).startswith('/nix/store/'), provider
+tools = {}
+for name in ('clang', 'nm'):
+    selected = shutil.which(name)
+    assert selected is not None, ('missing native tool', name)
+    resolved = Path(selected).resolve(strict=True)
+    assert str(resolved).startswith('/nix/store/'), ('non-store native tool', name, str(resolved))
+    tools[name] = dict(selected=selected, resolved=str(resolved),
+                       sha256=hashlib.sha256(resolved.read_bytes()).hexdigest())
 commands = []
 
 def run(argv):
@@ -45,6 +53,6 @@ with tempfile.TemporaryDirectory() as temp:
     assert outputs[0] == outputs[1], 'warning-only flag changed output bytes'
     Path(sys.argv[2]).write_text(json.dumps(dict(
         provider=str(provider), providerSha256=hashlib.sha256(provider.read_bytes()).hexdigest(),
-        commands=commands, strippedSha256=outputs, warningFlagBytesEqual=True,
+        commands=commands, tools=tools, strippedSha256=outputs, warningFlagBytesEqual=True,
         localSymbolRemoved=True, exportedConsumerResult=42,
         scope='one native C fixture; NativeAOT consumers remain separate required checks'), indent=2) + '\n')
