@@ -64,6 +64,7 @@
   openssl,
   zlib,
   clang,
+  cctools,
   darwin,
   apple-sdk,
   swiftPackages,
@@ -549,6 +550,12 @@ let
     globalJson =
       if builtins.pathExists "${filteredSrc}/global.json" then "${filteredSrc}/global.json" else null;
   };
+  # Select only strip: the SDK uses Apple-specific flags, while the default
+  # bintools strip may be LLVM. Do not replace the linker or dsymutil.
+  nativeDarwinStrip = runCommand "dotnet-native-apple-strip" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${cctools}/bin/strip "$out/bin/strip"
+  '';
   nativePackages = lib.mapAttrs (
     name: options:
     let
@@ -599,6 +606,7 @@ let
         swiftPackages.stdlib.dev
         apple-sdk
         darwin.ICU.dev
+        cctools
       ];
       ${if stdenv.hostPlatform.isDarwin then "failureHook" else null} = ''
         python3 ${../dotnet-native-products/link-context.py} failure \
@@ -628,6 +636,7 @@ let
         runHook preInstall
         ${dotnetSetup}
         ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          export PATH="${nativeDarwinStrip}/bin:$PATH"
           # NativeAOT asks for Swift overlays under /usr/lib/swift. Use
           # the immutable SDK's overlay stubs alongside the core input.
           export NIX_LDFLAGS="''${NIX_LDFLAGS-} -L${apple-sdk.sdkroot}/usr/lib/swift"
@@ -642,7 +651,8 @@ let
           python3 ${../dotnet-native-products/link-context.py} capture \
             --directory "$TMPDIR/native-link-context" --icu "${lib.getLib darwin.ICU}/lib/libicucore.dylib" \
             --nix-minimum ${lib.escapeShellArg stdenv.hostPlatform.darwinMinVersion} \
-            --core-stubs "${swiftPackages.stdlib.dev}/lib/libswiftCore.tbd" --overlay-sdk "${apple-sdk.sdkroot}"
+            --core-stubs "${swiftPackages.stdlib.dev}/lib/libswiftCore.tbd" --overlay-sdk "${apple-sdk.sdkroot}" \
+            --strip "${cctools}/bin/strip" --strip-version ${lib.escapeShellArg cctools.version}
           dotnet --info > "$TMPDIR/native-link-context/dotnet-info.txt"
         ''}dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
           ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"${

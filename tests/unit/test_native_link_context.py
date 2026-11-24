@@ -18,6 +18,15 @@ spec.loader.exec_module(link)
 
 
 class NativeDeployment(unittest.TestCase):
+    def test_strip_provider_rejects_missing_or_unexpected_selection(self):
+        with patch.object(link.shutil, 'which', return_value=None):
+            with self.assertRaisesRegex(AssertionError, 'strip not selected'):
+                link.strip_provider('/nix/store/expected/bin/strip', '1010.6')
+        with patch.object(link.shutil, 'which', return_value='/unexpected/strip'), \
+             patch.object(link.Path, 'resolve', side_effect=[Path('/unexpected/strip'), Path('/expected/strip')]):
+            with self.assertRaisesRegex(AssertionError, 'unexpected strip provider'):
+                link.strip_provider('/expected/strip', '1010.6')
+
     def context(self):
         return {'nixMinimumMacOS': '14.0', 'dependencies': [
             {'path': '/nix/store/icu/lib/libicucore.A.dylib', 'minimumMacOS': '14.0.0'}]}

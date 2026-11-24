@@ -57,6 +57,7 @@ pkgs.runCommand "dotnet-native-managed-gc-dependency-consumers"
       java --enable-preview --enable-native-access=ALL-UNNAMED "@$javaArgs" Consumer "$library" "$value"
     done < libraries.txt
     ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+      python3 ${./native/check-strip.py} ${pkgs.cctools}/bin/strip "$out/strip-receipt.json"
       python3 ${./native/check-deployment.py} "$out/proof.json" "$out/deployment-receipt.json" ${../pkgs/dotnet-native-products/link-context.py}
     ''}
   ''

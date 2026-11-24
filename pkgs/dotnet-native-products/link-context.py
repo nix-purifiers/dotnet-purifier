@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Retain Darwin linker inputs and assess, without changing, deployment targets."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -67,7 +68,22 @@ def dependency_metadata(library):
     return rows
 
 
-def capture(directory, library, nix_minimum, core_stubs, overlay_sdk):
+def strip_provider(expected, package_version):
+    selected = shutil.which('strip')
+    assert selected is not None, 'strip not selected'
+    resolved = Path(selected).resolve(strict=True)
+    assert resolved == Path(expected).resolve(strict=True), ('unexpected strip provider', selected, expected)
+    assert str(resolved).startswith('/nix/store/'), ('non-store strip provider', str(resolved))
+    digest = hashlib.sha256()
+    with resolved.open('rb') as file:
+        while chunk := file.read(1024**2):
+            digest.update(chunk)
+    return dict(selected=selected, resolved=str(resolved), sha256=digest.hexdigest(),
+                declaredPackageVersion=package_version,
+                versionScope='declared cctools package, not a version probe')
+
+
+def capture(directory, library, nix_minimum, core_stubs, overlay_sdk, strip=None, strip_version=None):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     keys = ('SDKROOT', 'DOTNET_ROOT', 'DEVELOPER_DIR', 'MACOSX_DEPLOYMENT_TARGET',
@@ -79,6 +95,9 @@ def capture(directory, library, nix_minimum, core_stubs, overlay_sdk):
     path = directory / 'link-environment.json'
     # Persist the environment even if dependency metadata or SDK assertions fail.
     path.write_text(json.dumps(context) + '\n')
+    if strip is not None:
+        context['stripProvider'] = strip_provider(strip, strip_version)
+        path.write_text(json.dumps(context) + '\n')
     context['dependencies'] = dependency_metadata(library)
     path.write_text(json.dumps(context) + '\n')
     assert context['SDKROOT'].startswith('/nix/store/'), ('non-store SDKROOT', context['SDKROOT'])
@@ -152,9 +171,11 @@ if __name__ == '__main__':
     parser.add_argument('--nix-minimum')
     parser.add_argument('--core-stubs', type=Path)
     parser.add_argument('--overlay-sdk', type=Path)
+    parser.add_argument('--strip', type=Path)
+    parser.add_argument('--strip-version')
     args = parser.parse_args()
     if args.mode == 'capture':
-        capture(args.directory, args.icu, args.nix_minimum, args.core_stubs, args.overlay_sdk)
+        capture(args.directory, args.icu, args.nix_minimum, args.core_stubs, args.overlay_sdk, args.strip, args.strip_version)
     elif args.mode == 'failure':
         failure(args.directory, args.log)
     else:
