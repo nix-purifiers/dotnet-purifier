@@ -113,7 +113,40 @@ assert (fixture/'dotnet-purifier.lock.json').read_bytes() == first_bytes
 system = subprocess.check_output(['nix','eval','--impure','--raw','--expr','builtins.currentSystem'],text=True).strip()
 check = 'native-multi' if args.fixture == 'native-multi' else 'native-ffi'
 replay_command = ['nix','build','--no-link','--print-out-paths',str(repo)+'#checks.'+system+'.'+check]
-replay_outputs = subprocess.check_output(replay_command,text=True).splitlines()
+proof_names = ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json')
+producers = []
+if platform.system() == 'Darwin':
+    producer_ref = str(repo) + '#checks.' + system + '.' + check + '.nativeProofProducers'
+    producers = json.loads(subprocess.check_output([
+        'nix', 'eval', '--json', '--option', 'allow-import-from-derivation', 'false',
+        producer_ref, '--apply', 'map toString'], text=True))
+try:
+    replay_outputs = subprocess.check_output(replay_command,text=True).splitlines()
+finally:
+    # A completed producer remains useful evidence if loading/calling it fails.
+    # Retain only diagnostics here; the replay exception must still fail the job.
+    diagnostics = []
+    for value in producers:
+        producer = Path(value)
+        item = {'producer': value, 'retained': []}
+        if producer.exists():
+            try:
+                item['outputMetadata'] = json.loads(subprocess.check_output(
+                    ['nix', 'path-info', '--json', str(producer)], text=True))
+                target = out / 'native-link-receipts' / producer.name
+                target.mkdir(parents=True, exist_ok=True)
+                for name in proof_names:
+                    source = producer / 'native-proof' / name
+                    if source.is_file():
+                        shutil.copyfile(source, target / name)
+                        item['retained'].append(name)
+            except Exception as error:
+                item['diagnosticError'] = str(error)
+        diagnostics.append(item)
+    if producers:
+        (out / 'native-link-diagnostics.json').write_text(json.dumps({
+            'nativeReplaySuccessClaimed': False, 'producers': diagnostics,
+        }, indent=2) + '\n')
 assert replay_outputs
 link_receipts = []
 if platform.system() == 'Darwin':
@@ -128,10 +161,8 @@ if platform.system() == 'Darwin':
             producer = Path(row['producer'])
             target = out / 'native-link-receipts' / producer.name
             target.mkdir(parents=True, exist_ok=True)
-            for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json'):
-                source = producer / 'native-proof' / name
-                assert source.stat().st_size > 0, source
-                shutil.copyfile(source, target / name)
+            for name in proof_names:
+                assert (target / name).stat().st_size > 0, target / name
             link_receipts.append(str(target.relative_to(out)))
 (out/'verification.json').write_text(json.dumps({
     'nativeLinkPrerequisites':prerequisites,

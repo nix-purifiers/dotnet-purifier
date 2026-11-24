@@ -660,7 +660,7 @@ let
         ${lib.optionalString stdenv.hostPlatform.isDarwin ''
           cp "$TMPDIR/native-link.log" "$out/native-proof/native-link.log"
           python3 ${../dotnet-native-products/link-context.py} assess \
-            --directory "$TMPDIR/native-link-context" --log "$TMPDIR/native-link.log"
+            --directory "$TMPDIR/native-link-context" --log "$TMPDIR/native-link.log" --published "$out/${library}"
           cp "$TMPDIR/native-link-context/"{link-environment.json,dotnet-info.txt,deployment.json} "$out/native-proof/"
         ''}runHook postInstall
       '';

@@ -82,3 +82,24 @@ class NativeDeployment(unittest.TestCase):
             self.assertIn('NATIVE_LINK_COMMAND ', lines[0])
             self.assertTrue(lines[-1].startswith('NATIVE_LINK_CONTEXT '))
             self.assertEqual(json.loads(lines[-1].removeprefix('NATIVE_LINK_CONTEXT '))['SDKROOT'], '/host/sdk')
+
+    def test_actual_library_provider_join_uses_produced_load_metadata(self):
+        context = self.context()
+        context['icuLibrary'] = '/nix/store/icu/lib/libicucore.dylib'
+        actual = [
+            {'path': '/nix/store/producer/lib/libanswer.dylib', 'minimumMacOS': '12.0',
+             'loads': ['/nix/store/icu/lib/libicucore.A.dylib']},
+            {'path': '/nix/store/icu/lib/libicucore.A.dylib', 'minimumMacOS': '14.0', 'loads': []},
+        ]
+        result = link.assess(context, '--target=arm64-apple-macos12.0', actual)
+        self.assertTrue(result['actualProducedDependenciesInspected'])
+        self.assertEqual(result['actualICUProviderPaths'], ['/nix/store/icu/lib/libicucore.A.dylib'])
+        self.assertFalse(result['lowerTargetRuntimeCoverageClaimed'])
+
+    def test_actual_library_cannot_fall_back_to_host_icu(self):
+        context = self.context()
+        context['icuLibrary'] = '/nix/store/icu/lib/libicucore.dylib'
+        actual = [{'path': '/nix/store/producer/lib/libanswer.dylib', 'minimumMacOS': '12.0',
+                   'loads': ['/usr/lib/libicucore.A.dylib']}]
+        with self.assertRaisesRegex(AssertionError, 'host or unexpected ICU provider'):
+            link.assess(context, '--target=arm64-apple-macos12.0', actual)

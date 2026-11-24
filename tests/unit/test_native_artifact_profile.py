@@ -6,6 +6,7 @@ import copy
 import json
 from pathlib import Path
 import runpy
+import subprocess
 import tempfile
 from unittest.mock import patch
 import unittest
@@ -73,7 +74,7 @@ class NativeArtifactProfile(unittest.TestCase):
 class NativeRelockIntegration(unittest.TestCase):
     """Exercise the real comparison script with external commands simulated."""
 
-    def run_profile(self, bad_inventory=None, darwin_receipts=False):
+    def run_profile(self, bad_inventory=None, darwin_receipts=False, replay_fails=False):
         old = {'sdk': {'version': 'test-sdk'}, 'contentHash': 'old', 'projects': [{
             'name': 'native', 'assemblyName': 'Answer', 'path': 'Answer.csproj',
             'nativePublish': {'runtimeIdentifierSource': 'sdk-host',
@@ -113,13 +114,19 @@ class NativeRelockIntegration(unittest.TestCase):
                 if command[0] == 'git':
                     return old_bytes
                 if command[:2] == ['nix', 'eval']:
+                    if command[-1] == 'map toString':
+                        return json.dumps([str(producer)])
                     if command[-1] == 'builtins.currentSystem':
                         return 'aarch64-darwin'
                     return json.dumps({'problems': [], 'outputs': ['native']})
                 if 'msbuild' in command:
                     return json.dumps({'Properties': {'NETCoreSdkVersion': 'test-sdk',
                         'NETCoreSdkPortableRuntimeIdentifier': 'osx-arm64'}})
+                if command[:2] == ['nix', 'path-info']:
+                    return json.dumps({str(producer): {'narHash': 'simulated-hash'}})
                 if command[:2] == ['nix', 'build']:
+                    if replay_fails:
+                        raise subprocess.CalledProcessError(1, command)
                     return str(replay) + '\n'
                 raise AssertionError(('unexpected external command', command))
 
@@ -135,13 +142,18 @@ class NativeRelockIntegration(unittest.TestCase):
                  patch('subprocess.check_output', side_effect=check_output), \
                  patch('subprocess.run', side_effect=run):
                 with patch('platform.system', return_value='Darwin' if darwin_receipts else 'Linux'):
-                    runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
+                    if replay_fails:
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
+                    else:
+                        runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
             if darwin_receipts:
-                self.assertTrue((out / 'native-consumer-proof-0.json').is_file())
+                if not replay_fails:
+                    self.assertTrue((out / 'native-consumer-proof-0.json').is_file())
                 for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json'):
                     self.assertEqual((out / 'native-link-receipts/producer' / name).read_bytes(),
                                      (native_proof / name).read_bytes())
-            return json.loads((out / 'verification.json').read_text())
+            return json.loads((out / ('native-link-diagnostics.json' if replay_fails else 'verification.json')).read_text())
 
     def test_cross_os_profile_reaches_repeat_reader_and_replay(self):
         result = self.run_profile()
@@ -164,3 +176,9 @@ class NativeRelockIntegration(unittest.TestCase):
     def test_darwin_replay_retains_link_sdk_and_consumer_receipts(self):
         result = self.run_profile(darwin_receipts=True)
         self.assertEqual(result['nativeLinkReceiptDirectories'], ['native-link-receipts/producer'])
+
+    def test_failed_replay_retains_completed_producer_without_success_claim(self):
+        result = self.run_profile(darwin_receipts=True, replay_fails=True)
+        self.assertFalse(result['nativeReplaySuccessClaimed'])
+        self.assertEqual(set(result['producers'][0]['retained']),
+                         {'link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json'})

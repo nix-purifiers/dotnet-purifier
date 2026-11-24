@@ -35,6 +35,9 @@ pkgs.runCommand "dotnet-native-managed-gc-dependency-consumers"
       pkgs.pkg-config
     ];
     spec = builtins.toJSON specs;
+    ${if pkgs.stdenv.hostPlatform.isDarwin then "nativeProofProducers" else null} = map (
+      project: project.nativePackages.answer
+    ) projects;
     passAsFile = [ "spec" ];
   }
   ''

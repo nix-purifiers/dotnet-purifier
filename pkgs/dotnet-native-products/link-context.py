@@ -85,10 +85,20 @@ def capture(directory, library, nix_minimum, core_stubs, overlay_sdk):
     return context
 
 
-def assess(context, log):
+def assess(context, log, produced_dependencies=None):
     targets = sorted(set(re.findall(r'--target=(?:arm64|aarch64|x86_64)-apple-macos([0-9.]+)', log)), key=version)
     assert len(targets) == 1, ('ambiguous or absent actual link target', targets)
-    minimum = max((row['minimumMacOS'] for row in context['dependencies']), key=version)
+    dependencies = context['dependencies'] if produced_dependencies is None else produced_dependencies
+    providers = []
+    if produced_dependencies is not None:
+        prefix = str(Path(context['icuLibrary']).parent) + '/'
+        for row in produced_dependencies:
+            if row['path'].startswith(prefix):
+                providers.append(row['path'])
+            for path in row['loads']:
+                if Path(path).name.startswith('libicu'):
+                    assert path.startswith(prefix), ('host or unexpected ICU provider', path, prefix)
+    minimum = max((row['minimumMacOS'] for row in dependencies), key=version)
     declared = max((targets[0], context['nixMinimumMacOS']), key=version)
     effective = max((declared, minimum), key=version)
     # Do not alter Apple's target. A dependency may not silently exceed both
@@ -99,7 +109,10 @@ def assess(context, log):
     return {'linkTargetMacOS': targets[0], 'dependencyMinimumMacOS': minimum,
             'effectiveMinimumMacOS': effective, 'nixMinimumMacOS': context['nixMinimumMacOS'],
             'linkTargetCoversDependencies': version(targets[0]) >= version(minimum),
-            'lowerTargetRuntimeCoverageClaimed': False}
+            'lowerTargetRuntimeCoverageClaimed': False,
+            'actualProducedDependenciesInspected': produced_dependencies is not None,
+            'actualICUProviderPaths': sorted(providers),
+            'dependencyMetadata': dependencies}
 
 
 def runtime_assessment(deployment, host):
@@ -133,6 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('mode', choices=('capture', 'assess', 'failure'))
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--log', type=Path)
+    parser.add_argument('--published', type=Path)
     parser.add_argument('--icu', type=Path)
     parser.add_argument('--nix-minimum')
     parser.add_argument('--core-stubs', type=Path)
@@ -144,5 +158,6 @@ if __name__ == '__main__':
         failure(args.directory, args.log)
     else:
         context = json.loads((args.directory / 'link-environment.json').read_text())
-        result = assess(context, args.log.read_text())
+        assert args.published is not None, 'published library required for assessment'
+        result = assess(context, args.log.read_text(), dependency_metadata(args.published))
         (args.directory / 'deployment.json').write_text(json.dumps(result, indent=2) + '\n')
