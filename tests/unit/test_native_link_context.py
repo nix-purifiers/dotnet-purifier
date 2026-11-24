@@ -73,15 +73,18 @@ class NativeDeployment(unittest.TestCase):
                 link.capture(temp, '/nix/store/icu/lib/libicucore.dylib', '14.0', '/nix/store/stubs', '/nix/store/sdk')
             saved = json.loads((Path(temp) / 'link-environment.json').read_text())
             self.assertEqual(saved['SDKROOT'], '/host/sdk')
+            (Path(temp) / 'dotnet-info.txt').write_text('SDK test-only\nRuntime test-only\n')
             log = Path(temp) / 'failed-link.log'
             log.write_text('clang Answer.o --target=arm64-apple-macos12.0 -licucore\n')
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 link.failure(temp, log)
             lines = output.getvalue().splitlines()
-            self.assertIn('NATIVE_LINK_COMMAND ', lines[0])
+            self.assertTrue(any(line.startswith('NATIVE_LINK_COMMAND ') for line in lines))
             self.assertTrue(lines[-1].startswith('NATIVE_LINK_CONTEXT '))
             self.assertEqual(json.loads(lines[-1].removeprefix('NATIVE_LINK_CONTEXT '))['SDKROOT'], '/host/sdk')
+            self.assertEqual(json.loads(lines[-1].removeprefix('NATIVE_LINK_CONTEXT '))['dotnetInfo'],
+                             'SDK test-only\nRuntime test-only\n')
 
     def test_actual_library_provider_join_uses_produced_load_metadata(self):
         context = self.context()

@@ -70,7 +70,7 @@ def dependency_metadata(library):
 def capture(directory, library, nix_minimum, core_stubs, overlay_sdk):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    keys = ('SDKROOT', 'DEVELOPER_DIR', 'MACOSX_DEPLOYMENT_TARGET',
+    keys = ('SDKROOT', 'DOTNET_ROOT', 'DEVELOPER_DIR', 'MACOSX_DEPLOYMENT_TARGET',
             'NIX_LDFLAGS', 'NIX_CFLAGS_COMPILE')
     context = {key: os.environ.get(key, '') for key in keys}
     context.update(clang=shutil.which('clang'), nixMinimumMacOS=nix_minimum,
@@ -124,10 +124,11 @@ def runtime_assessment(deployment, host):
 def failure(directory, log):
     path = Path(directory) / 'link-environment.json'
     context = json.loads(path.read_text()) if path.is_file() else {
-        key: os.environ.get(key, '') for key in ('SDKROOT', 'NIX_LDFLAGS', 'MACOSX_DEPLOYMENT_TARGET')}
+        key: os.environ.get(key, '') for key in ('SDKROOT', 'DOTNET_ROOT', 'NIX_LDFLAGS', 'MACOSX_DEPLOYMENT_TARGET')}
     info = Path(directory) / 'dotnet-info.txt'
     if info.is_file():
-        print('NATIVE_LINK_DOTNET_INFO ' + info.read_text()[:65536])
+        context['dotnetInfo'] = info.read_text()[:65536]
+        print('NATIVE_LINK_DOTNET_INFO ' + context['dotnetInfo'])
     if Path(log).is_file():
         lines = []
         with Path(log).open(errors='replace') as file:
