@@ -261,17 +261,20 @@ let
     chmod 700 "$XDG_RUNTIME_DIR"
     cp -rs --no-preserve=mode ${packageFolder}/. "$NUGET_PACKAGES"
     ${lib.optionalString lock.tools "dotnet tool restore --configfile ${toolConfig}"}
-    ${lib.optionalString (lock.workloads != [ ] && stdenv.hostPlatform.isDarwin) ''
-      # Workload Node must not depend on the host's OpenSSL configuration.
-      # Keep an explicit configuration (including an explicit empty value).
-      export OPENSSL_CONF="''${OPENSSL_CONF-${writeText "dotnet-workload-openssl.cnf" "# No host OpenSSL configuration for sandboxed workloads.\n"}}"
-    ''}
-    ${lib.optionalString (lock.workloads != [ ]) ''
-      python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
-      dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
-        --source ${packageFolder}
-      ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}
-    ''}
+    ${
+      lib.optionalString (lock.workloads != [ ] && stdenv.hostPlatform.isDarwin) ''
+        # Workload Node must not depend on the host's OpenSSL configuration.
+        # Keep an explicit configuration (including an explicit empty value).
+        export OPENSSL_CONF="''${OPENSSL_CONF-${writeText "dotnet-workload-openssl.cnf" "# No host OpenSSL configuration for sandboxed workloads.\n"}}"
+      ''
+    }${
+      lib.optionalString (lock.workloads != [ ]) ''
+        python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
+        dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
+          --source ${packageFolder}
+        ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}
+      ''
+    }
   ''
   + lib.optionalString stdenv.hostPlatform.isDarwin ''
     # The compilers record the paths of the sources and of the PDB in the
@@ -587,6 +590,11 @@ let
       # The macOS SDK contains overlay stubs, but Swift's core stub is
       # supplied by the standard-library development output.
       ++ lib.optional stdenv.hostPlatform.isDarwin swiftPackages.stdlib.dev;
+      # Test paths copy these exact inputs from the binary cache, without building.
+      ${if stdenv.hostPlatform.isDarwin then "nativeLinkPrerequisites" else null} = [
+        swiftPackages.stdlib.dev
+        apple-sdk
+      ];
       runtimeDependencies = map lib.getLib runtimeLibraries;
       dontAutoPatchelf = true;
       dontPatchELF = true;
@@ -622,7 +630,7 @@ let
           rid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
         ''}
         dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
-          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"
+          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"${lib.optionalString stdenv.hostPlatform.isDarwin ''-fl "-flp:LogFile=$TMPDIR/native-link.log;Verbosity=diagnostic"''}
         assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" -p:TargetFramework=${lib.escapeShellArg framework} \
           ${lib.escapeShellArgs buildProperties} -getProperty:TargetPath)
         input=$(python3 ${../dotnet-native-products/resolve-input.py} "$assembly" ${lib.escapeShellArg framework} "$TMPDIR/compiler-input.json")
@@ -630,7 +638,21 @@ let
         python3 ${../dotnet-native-products/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$input"
         cp "$TMPDIR/compiler-input.json" "$out/native-proof/compiler-input.json"
         cp "$assembly" "$out/native-proof/build-target.dll"
-        runHook postInstall
+        ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          cp "$TMPDIR/native-link.log" "$out/native-proof/native-link.log"
+          dotnet --info > "$out/native-proof/dotnet-info.txt"
+          python3 - "$out/native-proof/link-environment.json" <<'PYENV'
+          import json,os,sys
+          from pathlib import Path
+          sdkroot=os.environ.get("SDKROOT", "")
+          assert sdkroot.startswith('/nix/store/'), ('non-store SDKROOT',sdkroot)
+          Path(sys.argv[1]).write_text(json.dumps({
+            'SDKROOT':sdkroot,'NIX_LDFLAGS':os.environ.get("NIX_LDFLAGS", ""),
+            'swiftCoreStubs':'${swiftPackages.stdlib.dev}/lib/libswiftCore.tbd',
+            'swiftOverlaySdk':'${apple-sdk.sdkroot}',
+          },indent=2)+'\n')
+          PYENV
+        ''}runHook postInstall
       '';
     }
   ) nativeProducts;

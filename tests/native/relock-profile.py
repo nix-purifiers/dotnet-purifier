@@ -5,9 +5,11 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 
 from artifact_profile import shared_library, validate_artifacts
+from cache_prerequisites import ensure
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--repo', type=Path, required=True)
@@ -25,6 +27,7 @@ first_bytes = args.capture.read_bytes()
 (out / 'capture-1.lock.json').write_bytes(first_bytes)
 golden, first = json.loads(golden_bytes), json.loads(first_bytes)
 cli = ['nix', 'run', str(repo) + '#default', '--']
+prerequisites = ensure(repo, out / 'link-prerequisites')
 
 
 def checked_lock(path):
@@ -112,7 +115,25 @@ check = 'native-multi' if args.fixture == 'native-multi' else 'native-ffi'
 replay_command = ['nix','build','--no-link','--print-out-paths',str(repo)+'#checks.'+system+'.'+check]
 replay_outputs = subprocess.check_output(replay_command,text=True).splitlines()
 assert replay_outputs
+link_receipts = []
+if platform.system() == 'Darwin':
+    for index, output in enumerate(replay_outputs):
+        consumer = Path(output) / 'proof.json'
+        proof = json.loads(consumer.read_text())
+        shutil.copyfile(consumer, out / ('native-consumer-proof-' + str(index) + '.json'))
+        rows = proof if isinstance(proof, list) else [proof]
+        for row in rows:
+            producer = Path(row['producer'])
+            target = out / 'native-link-receipts' / producer.name
+            target.mkdir(parents=True, exist_ok=True)
+            for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log'):
+                source = producer / 'native-proof' / name
+                assert source.stat().st_size > 0, source
+                shutil.copyfile(source, target / name)
+            link_receipts.append(str(target.relative_to(out)))
 (out/'verification.json').write_text(json.dumps({
+    'nativeLinkPrerequisites':prerequisites,
+    'nativeLinkReceiptDirectories':sorted(set(link_receipts)),
     'fixture':args.fixture,'machine':platform.machine(),'sdkObservations':observations,
     'changedPaths':[list(p) for p in sorted(actual_changes,key=str)],
     'committedContentHash':golden['contentHash'],'capturedContentHash':first['contentHash'],

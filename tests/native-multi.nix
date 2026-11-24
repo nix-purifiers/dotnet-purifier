@@ -26,6 +26,6 @@ pkgs.runCommand "dotnet-native-multi-framework-input" { nativeBuildInputs = [ pk
   library=ctypes.CDLL(str(root/model['library']))
   function=library.native_answer;function.argtypes=[ctypes.c_int];function.restype=ctypes.c_int
   assert function(1)==44
-  Path(sys.argv[2]).write_text(json.dumps({'framework':'net10.0','actualCompilerRootMetadataJoined':True,'actualCall':44},indent=2)+'\n')
+  Path(sys.argv[2]).write_text(json.dumps({'framework':'net10.0','actualCompilerRootMetadataJoined':True,'actualCall':44,'producer':str(root)},indent=2)+'\n')
   PY
 ''

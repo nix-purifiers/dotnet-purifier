@@ -14,6 +14,11 @@ spec = importlib.util.spec_from_file_location(
     'artifact_profile', os.environ['DOTNET_PURIFIER_NATIVE_ARTIFACT_HELPER'])
 profile = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(profile)
+cache_spec = importlib.util.spec_from_file_location(
+    'cache_prerequisites', os.environ['DOTNET_PURIFIER_NATIVE_CACHE_HELPER'])
+cache = importlib.util.module_from_spec(cache_spec)
+cache_spec.loader.exec_module(cache)
+
 
 
 class NativeArtifactProfile(unittest.TestCase):
@@ -68,7 +73,7 @@ class NativeArtifactProfile(unittest.TestCase):
 class NativeRelockIntegration(unittest.TestCase):
     """Exercise the real comparison script with external commands simulated."""
 
-    def run_profile(self, bad_inventory=None):
+    def run_profile(self, bad_inventory=None, darwin_receipts=False):
         old = {'sdk': {'version': 'test-sdk'}, 'contentHash': 'old', 'projects': [{
             'name': 'native', 'assemblyName': 'Answer', 'path': 'Answer.csproj',
             'nativePublish': {'runtimeIdentifierSource': 'sdk-host',
@@ -90,6 +95,17 @@ class NativeRelockIntegration(unittest.TestCase):
             capture = fixture / 'dotnet-purifier.lock.json'
             capture.write_bytes(first_bytes)
             out = repo / 'out'
+            replay = repo / 'native-replay'
+            replay.mkdir()
+            producer = repo / 'producer'
+            native_proof = producer / 'native-proof'
+            native_proof.mkdir(parents=True)
+            (replay / 'proof.json').write_text(json.dumps([{'producer': str(producer)}]))
+            for name, contents in [('link-environment.json', '{"SDKROOT":"/nix/store/test-sdk"}'),
+                                   ('native-link.log', 'simulated clang command'),
+                                   ('dotnet-info.txt', 'simulated SDK runtime info')]:
+                (native_proof / name).write_text(contents)
+
 
             def check_output(command, **kwargs):
                 if command[0] == 'git':
@@ -102,7 +118,7 @@ class NativeRelockIntegration(unittest.TestCase):
                     return json.dumps({'Properties': {'NETCoreSdkVersion': 'test-sdk',
                         'NETCoreSdkPortableRuntimeIdentifier': 'osx-arm64'}})
                 if command[:2] == ['nix', 'build']:
-                    return '/nix/store/simulated-native-replay\n'
+                    return str(replay) + '\n'
                 raise AssertionError(('unexpected external command', command))
 
             def run(command, **kwargs):
@@ -113,10 +129,16 @@ class NativeRelockIntegration(unittest.TestCase):
 
             argv = ['relock-profile.py', '--repo', str(repo), '--fixture', 'native42',
                     '--capture', str(capture), '--out', str(out)]
-            with patch('sys.argv', argv), patch.dict('sys.modules', artifact_profile=profile), \
+            with patch('sys.argv', argv), patch.dict('sys.modules', artifact_profile=profile, cache_prerequisites=cache), \
                  patch('subprocess.check_output', side_effect=check_output), \
                  patch('subprocess.run', side_effect=run):
-                runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
+                with patch('platform.system', return_value='Darwin' if darwin_receipts else 'Linux'):
+                    runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
+            if darwin_receipts:
+                self.assertTrue((out / 'native-consumer-proof-0.json').is_file())
+                for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log'):
+                    self.assertEqual((out / 'native-link-receipts/producer' / name).read_bytes(),
+                                     (native_proof / name).read_bytes())
             return json.loads((out / 'verification.json').read_text())
 
     def test_cross_os_profile_reaches_repeat_reader_and_replay(self):
@@ -124,11 +146,19 @@ class NativeRelockIntegration(unittest.TestCase):
         self.assertTrue(result['repeatedCaptureByteIdentical'])
         self.assertEqual(set(result['nativeNixReaders']), {'committed', 'first', 'second'})
         self.assertIn(['projects', 0, 'nativePublish', 'artifacts'], result['changedPaths'])
-        self.assertEqual(result['capturedLockNativeReplay']['outputs'],
-                         ['/nix/store/simulated-native-replay'])
+        self.assertTrue(result['capturedLockNativeReplay']['outputs'][0].endswith('/native-replay'))
 
     def test_extra_artifact_in_either_inventory_stops_comparison(self):
         for inventory in ('committed', 'captured'):
             with self.subTest(inventory=inventory), self.assertRaisesRegex(
                     AssertionError, 'unexpected native artifacts'):
                 self.run_profile(inventory)
+
+    def test_failed_cache_guard_stops_relock_before_native_replay(self):
+        with patch.object(cache, 'ensure', side_effect=RuntimeError('cache prerequisites unavailable')):
+            with self.assertRaisesRegex(RuntimeError, 'cache prerequisites unavailable'):
+                self.run_profile()
+
+    def test_darwin_replay_retains_link_sdk_and_consumer_receipts(self):
+        result = self.run_profile(darwin_receipts=True)
+        self.assertEqual(result['nativeLinkReceiptDirectories'], ['native-link-receipts/producer'])

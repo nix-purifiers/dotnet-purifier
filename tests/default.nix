@@ -190,6 +190,7 @@ in
       {
         nativeBuildInputs = [ pkgs.python3 ];
         DOTNET_PURIFIER_CLI = ../cli/dotnet_purifier.py;
+        DOTNET_PURIFIER_NATIVE_CACHE_HELPER = ./native/cache_prerequisites.py;
         DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE = ./native/relock-profile.py;
         DOTNET_PURIFIER_NATIVE_ARTIFACT_HELPER = ./native/artifact_profile.py;
         DOTNET_PURIFIER_WORKLOAD_MODE_HELPER = ../pkgs/dotnet-purifier/workload-mode.py;
