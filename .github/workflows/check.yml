@@ -64,6 +64,13 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - name: Select the optional packaged fixture SDK
         run: bash tests/fixture-sdk.sh '${{ matrix.fixture }}'
+      - name: Retain current fixture runtime identity
+        if: matrix.fixture == 'current'
+        continue-on-error: true
+        working-directory: tests/fixtures/current
+        run: |
+          python3 "$GITHUB_WORKSPACE/tests/runtime-identity.py" --dotnet "$DOTNET_PURIFIER_DOTNET" \
+            --out "$RUNNER_TEMP/current-runtime-identity"
       - name: Relock ${{ matrix.fixture }}
         run: |
           lockfile="$GITHUB_WORKSPACE/tests/fixtures/${{ matrix.fixture }}/dotnet-purifier.lock.json"
@@ -86,6 +93,12 @@ jobs:
             rm src/App/packages.lock.json
           fi
           nix run "$GITHUB_WORKSPACE#default" -- lock --force --lockfile "$lockfile"
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.fixture == 'current'
+        with:
+          name: current-runtime-identity-${{ matrix.runner }}
+          path: ${{ runner.temp }}/current-runtime-identity
+          if-no-files-found: warn
       - name: The lockfile is unchanged
         if: ${{ !startsWith(matrix.fixture, 'native') }}
         run: git diff --exit-code -- tests
