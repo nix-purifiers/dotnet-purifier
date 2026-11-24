@@ -259,6 +259,11 @@ let
     chmod 700 "$XDG_RUNTIME_DIR"
     cp -rs --no-preserve=mode ${packageFolder}/. "$NUGET_PACKAGES"
     ${lib.optionalString lock.tools "dotnet tool restore --configfile ${toolConfig}"}
+    ${lib.optionalString (lock.workloads != [ ] && stdenv.hostPlatform.isDarwin) ''
+      # Workload Node must not depend on the host's OpenSSL configuration.
+      # Keep an explicit configuration (including an explicit empty value).
+      export OPENSSL_CONF="''${OPENSSL_CONF-${writeText "dotnet-workload-openssl.cnf" "# No host OpenSSL configuration for sandboxed workloads.\n"}}"
+    ''}
     ${lib.optionalString (lock.workloads != [ ]) ''
       python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
       dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \

@@ -23,7 +23,7 @@ configurations { assets }
 dependencies { assets(selected.coordinate) }
 tasks.register('resolveAssets') { doLast { new File(selected.report).text=configurations.assets.singleFile.canonicalPath } }
 ''')
-subprocess.run(['gradle','--offline','--no-daemon','--console=plain','resolveAssets'],cwd=project,check=True,timeout=180)
+subprocess.run(['gradle','--offline','--no-daemon','--console=plain','--stacktrace','resolveAssets'],cwd=project,check=True,timeout=180)
 resolved=Path(report.read_text())
 assert hashlib.sha256(resolved.read_bytes()).digest()==hashlib.sha256(poms[0].with_suffix('.jar').read_bytes()).digest()
 Path(sys.argv[2]).write_text(str(resolved))
