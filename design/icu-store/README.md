@@ -22,16 +22,26 @@ No culture/sorting/CLDR/ABI compatibility or product fix follows from that alone
 The App inventory is limited to 16 MiB and 2,048 entries; four copies total at
 most 64 MiB. ICU files are symlinks into the immutable store. Each child has a
 15-second/64-KiB combined-output bound; runtime identity has two such commands.
-The four case commands share a 120-second controller deadline including setup
-and identity capture. Only the helper's own direct child is killed. Core dumps
-are disabled; there is no process-wide file-size limit or GC/runtime switch.
-These are controller/input bounds, not a hard Nix daemon disk or memory quota.
-The proposed 128-MiB scratch budget has no continuous disk monitor yet; source
-and resource review must reconcile that before authorizing native execution.
+An outer controller starts its own diagnostic session before imports, runtime
+identity capture, dependency inspection and case execution. It polls scratch
+(128 MiB), aggregate resident memory (2 GiB) and owned-session processes (8),
+with a 120-second deadline and 512-KiB helper output cap. Sampling uses only the
+declared Apple `ps` output, with numeric fields and a one-second/256-KiB bound;
+only owned-session rows are retained. Missing/denied/malformed sampling is a
+failure. Only the controller-created session is signalled, including descendants.
+
+These are polled controller/input bounds, not hard OS or Nix daemon quotas.
+A sample may take one second; termination has a five-second allowance. Setup and
+identity are inside the outer deadline. Scratch scanning does not follow store
+symlinks. The controller gives the helper private HOME/TMPDIR; their exact values
+are retained and shared by all four case controls. Core dumps are disabled;
+there is no process-wide file-size, virtual-memory, GC or globalization-mode
+limit. Local Python tests exercise guard failures and owned descendant cleanup;
+actual Darwin sampler behavior, cache trust and runtime results remain unproven.
 
 Before registration/execution, independently review the frozen source and exact
 Darwin evaluation, enforce the existing cache-only guard for the selected ICU
-output closure, and obtain the manager's native CI authorization. No local native
+output closure plus the exact declared Apple `ps` output, and obtain the manager's native CI authorization. No local native
 run, new host/profile access, SDK/default activation or source toolchain build is
 authorized by this document. The fixture must remain separate from current
 mandatory success gates and must not suppress their failures.
