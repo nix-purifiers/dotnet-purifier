@@ -121,12 +121,14 @@ if platform.system() == 'Darwin':
         consumer = Path(output) / 'proof.json'
         proof = json.loads(consumer.read_text())
         shutil.copyfile(consumer, out / ('native-consumer-proof-' + str(index) + '.json'))
+        shutil.copyfile(Path(output) / 'deployment-receipt.json',
+                        out / ('native-deployment-proof-' + str(index) + '.json'))
         rows = proof if isinstance(proof, list) else [proof]
         for row in rows:
             producer = Path(row['producer'])
             target = out / 'native-link-receipts' / producer.name
             target.mkdir(parents=True, exist_ok=True)
-            for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log'):
+            for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json'):
                 source = producer / 'native-proof' / name
                 assert source.stat().st_size > 0, source
                 shutil.copyfile(source, target / name)

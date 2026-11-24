@@ -64,6 +64,7 @@
   openssl,
   zlib,
   clang,
+  darwin,
   apple-sdk,
   swiftPackages,
   krb5,
@@ -589,12 +590,20 @@ let
       ]
       # The macOS SDK contains overlay stubs, but Swift's core stub is
       # supplied by the standard-library development output.
-      ++ lib.optional stdenv.hostPlatform.isDarwin swiftPackages.stdlib.dev;
+      ++ lib.optionals stdenv.hostPlatform.isDarwin [
+        swiftPackages.stdlib.dev
+        darwin.ICU
+      ];
       # Test paths copy these exact inputs from the binary cache, without building.
       ${if stdenv.hostPlatform.isDarwin then "nativeLinkPrerequisites" else null} = [
         swiftPackages.stdlib.dev
         apple-sdk
+        darwin.ICU.dev
       ];
+      ${if stdenv.hostPlatform.isDarwin then "failureHook" else null} = ''
+        python3 ${../dotnet-native-products/link-context.py} failure \
+          --directory "$TMPDIR/native-link-context" --log "$TMPDIR/native-link.log"
+      '';
       runtimeDependencies = map lib.getLib runtimeLibraries;
       dontAutoPatchelf = true;
       dontPatchELF = true;
@@ -629,7 +638,13 @@ let
         ${lib.optionalString (p.nativePublish.runtimeIdentifierSource == "sdk-host") ''
           rid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
         ''}
-        dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
+        ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          python3 ${../dotnet-native-products/link-context.py} capture \
+            --directory "$TMPDIR/native-link-context" --icu "${lib.getLib darwin.ICU}/lib/libicucore.dylib" \
+            --nix-minimum ${lib.escapeShellArg stdenv.hostPlatform.darwinMinVersion} \
+            --core-stubs "${swiftPackages.stdlib.dev}/lib/libswiftCore.tbd" --overlay-sdk "${apple-sdk.sdkroot}"
+          dotnet --info > "$TMPDIR/native-link-context/dotnet-info.txt"
+        ''}dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
           ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"${
             lib.optionalString stdenv.hostPlatform.isDarwin (
               " " + ''-fl "-flp:LogFile=$TMPDIR/native-link.log;Verbosity=diagnostic"''
@@ -644,18 +659,9 @@ let
         cp "$assembly" "$out/native-proof/build-target.dll"
         ${lib.optionalString stdenv.hostPlatform.isDarwin ''
           cp "$TMPDIR/native-link.log" "$out/native-proof/native-link.log"
-          dotnet --info > "$out/native-proof/dotnet-info.txt"
-          python3 - "$out/native-proof/link-environment.json" <<'PYENV'
-          import json,os,sys
-          from pathlib import Path
-          sdkroot=os.environ.get("SDKROOT", "")
-          assert sdkroot.startswith('/nix/store/'), ('non-store SDKROOT',sdkroot)
-          Path(sys.argv[1]).write_text(json.dumps({
-            'SDKROOT':sdkroot,'NIX_LDFLAGS':os.environ.get("NIX_LDFLAGS", ""),
-            'swiftCoreStubs':'${swiftPackages.stdlib.dev}/lib/libswiftCore.tbd',
-            'swiftOverlaySdk':'${apple-sdk.sdkroot}',
-          },indent=2)+'\n')
-          PYENV
+          python3 ${../dotnet-native-products/link-context.py} assess \
+            --directory "$TMPDIR/native-link-context" --log "$TMPDIR/native-link.log"
+          cp "$TMPDIR/native-link-context/"{link-environment.json,dotnet-info.txt,deployment.json} "$out/native-proof/"
         ''}runHook postInstall
       '';
     }

@@ -101,9 +101,11 @@ class NativeRelockIntegration(unittest.TestCase):
             native_proof = producer / 'native-proof'
             native_proof.mkdir(parents=True)
             (replay / 'proof.json').write_text(json.dumps([{'producer': str(producer)}]))
+            (replay / 'deployment-receipt.json').write_text('[{"executedHostMacOS":"15.0"}]')
             for name, contents in [('link-environment.json', '{"SDKROOT":"/nix/store/test-sdk"}'),
                                    ('native-link.log', 'simulated clang command'),
-                                   ('dotnet-info.txt', 'simulated SDK runtime info')]:
+                                   ('dotnet-info.txt', 'simulated SDK runtime info'),
+                                   ('deployment.json', '{"effectiveMinimumMacOS":"14.0"}')]:
                 (native_proof / name).write_text(contents)
 
 
@@ -136,7 +138,7 @@ class NativeRelockIntegration(unittest.TestCase):
                     runpy.run_path(os.environ['DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE'], run_name='__main__')
             if darwin_receipts:
                 self.assertTrue((out / 'native-consumer-proof-0.json').is_file())
-                for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log'):
+                for name in ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json'):
                     self.assertEqual((out / 'native-link-receipts/producer' / name).read_bytes(),
                                      (native_proof / name).read_bytes())
             return json.loads((out / 'verification.json').read_text())

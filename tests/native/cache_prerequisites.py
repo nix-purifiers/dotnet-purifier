@@ -34,7 +34,7 @@ def ensure(repo, out):
     receipt.update(evaluate=evaluate, status='evaluating-inputs')
     path.write_text(json.dumps(receipt, indent=2) + '\n')
     paths = json.loads(subprocess.check_output(evaluate, env=env, text=True))
-    assert len(paths) == len(set(paths)) == 2 and all(p.startswith('/nix/store/') for p in paths), paths
+    assert len(paths) == len(set(paths)) and len(paths) >= 2 and all(p.startswith('/nix/store/') for p in paths), paths
     # Copy exact output paths and their closure from the trusted binary cache.
     # Unlike a build request, this operation cannot fall back to a compiler build.
     command = ['nix', 'copy', '--from', 'https://cache.nixos.org', *paths]

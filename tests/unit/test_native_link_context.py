@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: MIT
+"""Do not turn a lower link target into an unsupported runtime claim."""
+import contextlib
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location(
+    'link_context', os.environ['DOTNET_PURIFIER_NATIVE_LINK_CONTEXT'])
+link = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(link)
+
+
+class NativeDeployment(unittest.TestCase):
+    def context(self):
+        return {'nixMinimumMacOS': '14.0', 'dependencies': [
+            {'path': '/nix/store/icu/lib/libicucore.A.dylib', 'minimumMacOS': '14.0.0'}]}
+
+    def test_lower_target_is_recorded_without_claiming_lower_runtime_support(self):
+        result = link.assess(self.context(), 'clang Answer.o --target=arm64-apple-macos12.0')
+        self.assertEqual(result['linkTargetMacOS'], '12.0')
+        self.assertEqual(result['effectiveMinimumMacOS'], '14.0.0')
+        self.assertFalse(result['linkTargetCoversDependencies'])
+        self.assertFalse(result['lowerTargetRuntimeCoverageClaimed'])
+        observed = link.runtime_assessment(result, '15.7.2')
+        self.assertEqual(observed['executedHostMacOS'], '15.7.2')
+        self.assertEqual(observed['runtimeScope'], 'actual executed host only')
+
+    def test_host_below_dependency_minimum_is_rejected_despite_target12(self):
+        result = link.assess(self.context(), '--target=arm64-apple-macos12.0')
+        with self.assertRaisesRegex(AssertionError, 'runtime host below'):
+            link.runtime_assessment(result, '13.6')
+
+    def test_dependency_cannot_silently_raise_nix_platform_minimum(self):
+        context = self.context()
+        context['nixMinimumMacOS'] = '13.0'
+        with self.assertRaisesRegex(AssertionError, 'dependencies exceed'):
+            link.assess(context, '--target=arm64-apple-macos12.0')
+
+    def test_ambiguous_or_missing_actual_target_is_rejected(self):
+        for log in ('clang Answer.o', '--target=arm64-apple-macos12.0 --target=arm64-apple-macos14.0'):
+            with self.subTest(log=log), self.assertRaisesRegex(AssertionError, 'ambiguous or absent'):
+                link.assess(self.context(), log)
+
+    def test_reads_real_macho_load_command_layout_as_data(self):
+        command = struct.pack('<IIIIII', 50, 24, 1, 14 << 16, (14 << 16) | (4 << 8), 0)
+        header = struct.pack('<IiiIIIII', 0xfeedfacf, 0x100000c, 0, 6, 1, len(command), 0, 0)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'metadata.dylib'
+            path.write_bytes(header + command)
+            self.assertEqual(link.macho(path)['minimumMacOS'], '14.0.0')
+            path.write_bytes(b'bad header')
+            with self.assertRaisesRegex(AssertionError, 'Mach-O64'):
+                link.macho(path)
+
+    def test_context_survives_failed_capture_and_failure_output(self):
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, SDKROOT='/host/sdk'), \
+             patch.object(link, 'dependency_metadata', return_value=self.context()['dependencies']):
+            with self.assertRaisesRegex(AssertionError, 'non-store SDKROOT'):
+                link.capture(temp, '/nix/store/icu/lib/libicucore.dylib', '14.0', '/nix/store/stubs', '/nix/store/sdk')
+            saved = json.loads((Path(temp) / 'link-environment.json').read_text())
+            self.assertEqual(saved['SDKROOT'], '/host/sdk')
+            log = Path(temp) / 'failed-link.log'
+            log.write_text('clang Answer.o --target=arm64-apple-macos12.0 -licucore\n')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                link.failure(temp, log)
+            lines = output.getvalue().splitlines()
+            self.assertIn('NATIVE_LINK_COMMAND ', lines[0])
+            self.assertTrue(lines[-1].startswith('NATIVE_LINK_CONTEXT '))
+            self.assertEqual(json.loads(lines[-1].removeprefix('NATIVE_LINK_CONTEXT '))['SDKROOT'], '/host/sdk')

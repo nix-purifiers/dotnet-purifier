@@ -25,7 +25,7 @@ class NativeCachePrerequisites(unittest.TestCase):
             evaluate.assert_not_called()
 
     def test_darwin_copies_exact_cache_outputs_without_any_build_request(self):
-        paths = ['/nix/store/swift-stubs', '/nix/store/apple-sdk']
+        paths = ['/nix/store/swift-stubs', '/nix/store/apple-sdk', '/nix/store/icu-dev']
         success = subprocess.CompletedProcess([], 0, '', '')
         with tempfile.TemporaryDirectory() as temp, patch.object(cache.sys, 'platform', 'darwin'), \
              patch.object(cache.subprocess, 'check_output', side_effect=[json.dumps(paths), json.dumps({'closure': paths})]), \
@@ -38,7 +38,7 @@ class NativeCachePrerequisites(unittest.TestCase):
             self.assertFalse(receipt['sourceBuildsAllowed'])
 
     def test_missing_cache_fails_and_is_retained_without_retry(self):
-        paths = ['/nix/store/swift-stubs', '/nix/store/apple-sdk']
+        paths = ['/nix/store/swift-stubs', '/nix/store/apple-sdk', '/nix/store/icu-dev']
         failure = subprocess.CompletedProcess([], 1, '', 'cannot build: no builders')
         with tempfile.TemporaryDirectory() as temp, patch.object(cache.sys, 'platform', 'darwin'), \
              patch.object(cache.subprocess, 'check_output', return_value=json.dumps(paths)), \
@@ -49,3 +49,12 @@ class NativeCachePrerequisites(unittest.TestCase):
             receipt = json.loads((Path(temp) / 'cache-prerequisites.json').read_text())
             self.assertEqual(receipt['status'], 'unavailable')
             self.assertEqual(receipt['exitCode'], 1)
+
+    def test_empty_or_duplicate_prerequisites_stop_before_copy(self):
+        for paths in ([], ['/nix/store/one', '/nix/store/one']):
+            with tempfile.TemporaryDirectory() as temp, patch.object(cache.sys, 'platform', 'darwin'), \
+                 patch.object(cache.subprocess, 'check_output', return_value=json.dumps(paths)), \
+                 patch.object(cache.subprocess, 'run') as run:
+                with self.assertRaises(AssertionError):
+                    cache.ensure(temp, temp)
+                run.assert_not_called()

@@ -28,4 +28,7 @@ pkgs.runCommand "dotnet-native-multi-framework-input" { nativeBuildInputs = [ pk
   assert function(1)==44
   Path(sys.argv[2]).write_text(json.dumps({'framework':'net10.0','actualCompilerRootMetadataJoined':True,'actualCall':44,'producer':str(root)},indent=2)+'\n')
   PY
+  ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+    python3 ${./native/check-deployment.py} "$out/proof.json" "$out/deployment-receipt.json" ${../pkgs/dotnet-native-products/link-context.py}
+  ''}
 ''
