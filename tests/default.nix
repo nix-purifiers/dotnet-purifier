@@ -20,6 +20,18 @@ let
   # from nuget.org.
   multi = build { src = ./fixtures/multi; };
 
+  # Inspect the real generated native publish command without realizing its tools.
+  nativeArgvProject = build {
+    src = ./fixtures/native42;
+    nativeProducts.answer = {
+      project = "Answer";
+      exports = [
+        "native_answer"
+        "native_collections"
+      ];
+    };
+  };
+
   # Packages from a second feed of nuget.config with package source
   # mapping, from a folder feed in the build's tree and from an MSBuild SDK
   # package; a build that runs a local tool; a self-contained executable
@@ -190,6 +202,14 @@ in
       {
         nativeBuildInputs = [ pkgs.python3 ];
         DOTNET_PURIFIER_CLI = ../cli/dotnet_purifier.py;
+        DOTNET_PURIFIER_NATIVE_PUBLISH_PHASE = builtins.toFile "native-publish-phase.json" (
+          builtins.unsafeDiscardStringContext (
+            builtins.toJSON {
+              phase = nativeArgvProject.nativePackages.answer.installPhase;
+              darwin = pkgs.stdenv.hostPlatform.isDarwin;
+            }
+          )
+        );
         DOTNET_PURIFIER_NATIVE_CACHE_HELPER = ./native/cache_prerequisites.py;
         DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE = ./native/relock-profile.py;
         DOTNET_PURIFIER_NATIVE_ARTIFACT_HELPER = ./native/artifact_profile.py;

@@ -630,7 +630,11 @@ let
           rid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
         ''}
         dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
-          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"${lib.optionalString stdenv.hostPlatform.isDarwin ''-fl "-flp:LogFile=$TMPDIR/native-link.log;Verbosity=diagnostic"''}
+          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"${
+            lib.optionalString stdenv.hostPlatform.isDarwin (
+              " " + ''-fl "-flp:LogFile=$TMPDIR/native-link.log;Verbosity=diagnostic"''
+            )
+          }
         assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" -p:TargetFramework=${lib.escapeShellArg framework} \
           ${lib.escapeShellArgs buildProperties} -getProperty:TargetPath)
         input=$(python3 ${../dotnet-native-products/resolve-input.py} "$assembly" ${lib.escapeShellArg framework} "$TMPDIR/compiler-input.json")
