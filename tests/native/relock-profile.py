@@ -112,7 +112,7 @@ readers['second'] = checked_lock(second_path)
 assert (fixture/'dotnet-purifier.lock.json').read_bytes() == first_bytes
 system = subprocess.check_output(['nix','eval','--impure','--raw','--expr','builtins.currentSystem'],text=True).strip()
 check = 'native-multi' if args.fixture == 'native-multi' else 'native-ffi'
-replay_command = ['nix','build','--no-link','--print-out-paths',str(repo)+'#checks.'+system+'.'+check]
+replay_command = ['nix','build','-L','--no-link','--print-out-paths',str(repo)+'#checks.'+system+'.'+check]
 proof_names = ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json')
 producers = []
 if platform.system() == 'Darwin':

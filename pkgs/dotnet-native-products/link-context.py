@@ -147,7 +147,8 @@ def failure(directory, log):
     info = Path(directory) / 'dotnet-info.txt'
     if info.is_file():
         context['dotnetInfo'] = info.read_text()[:65536]
-        print('NATIVE_LINK_DOTNET_INFO ' + context['dotnetInfo'])
+        # Keep the full bounded text in the compact JSON below. Printing it
+        # twice pushes the original failure out of Nix's last-25-lines tail.
     if Path(log).is_file():
         lines = []
         with Path(log).open(errors='replace') as file:

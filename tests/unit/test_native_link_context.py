@@ -105,6 +105,22 @@ class NativeDeployment(unittest.TestCase):
             self.assertEqual(json.loads(lines[-1].removeprefix('NATIVE_LINK_CONTEXT '))['dotnetInfo'],
                              'SDK test-only\nRuntime test-only\n')
 
+    def test_long_sdk_info_does_not_displace_original_error_from_nix_tail(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            info = ''.join('SDK retained line %d\n' % i for i in range(80))
+            (root / 'dotnet-info.txt').write_text(info)
+            (root / 'link-environment.json').write_text(json.dumps({'SDKROOT': '/nix/store/sdk'}))
+            log = root / 'native-link.log'
+            log.write_text('clang Answer.o --target=arm64-apple-macos12.0\n')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                link.failure(root, log)
+            lines = ['ACTUAL_PRODUCER_ERROR retained sentinel'] + output.getvalue().splitlines()
+            self.assertIn('ACTUAL_PRODUCER_ERROR retained sentinel', lines[-25:])
+            context = json.loads(lines[-1].removeprefix('NATIVE_LINK_CONTEXT '))
+            self.assertEqual(context['dotnetInfo'], info)
+
     def test_actual_library_provider_join_uses_produced_load_metadata(self):
         context = self.context()
         context['icuLibrary'] = '/nix/store/icu/lib/libicucore.dylib'
