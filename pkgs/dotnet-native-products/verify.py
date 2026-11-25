@@ -21,13 +21,20 @@ for name in spec['exports']:
     assert not conventions or conventions==['System.Runtime.CompilerServices.CallConvCdecl'], 'export is not a platform C ABI: '+name
 
 matches=[]
+diagnostics=[]
+diagnostic_files=0
 for path in published.rglob('*'):
     if not path.is_file(): continue
     assert path.resolve().is_relative_to(published), 'native publish symlink escapes output'
     magic=path.read_bytes()[:32]
+    diagnostic_files+=1
+    diagnostic={'path':str(path.relative_to(published)), 'magic':magic[:8].hex(),
+                'size':path.stat().st_size}
+    if len(diagnostics)<64: diagnostics.append(diagnostic)
     if magic[:4]==b'\x7fELF':
         assert magic[4:6]==b'\x02\x01', 'expected 64-bit little-endian native library'
         kind,machine=struct.unpack_from('<HH',magic,16)
+        diagnostic.update(format='ELF',kind=kind,machine=machine)
         if kind!=3: continue
         expected={'x86_64-linux':62,'aarch64-linux':183}.get(spec['system'])
         assert machine==expected, 'native ELF target does not match selected system'
@@ -35,12 +42,37 @@ for path in published.rglob('*'):
         symbols={line.split()[0].split('@')[0] for line in result.stdout.splitlines() if len(line.split())>=2 and line.split()[1] in ('T','W')}
     elif magic[:4]==b'\xcf\xfa\xed\xfe':
         cpu,subtype,kind=struct.unpack_from('<III',magic,4)
+        diagnostic.update(format='Mach-O',kind=kind,cpu=cpu)
         if kind!=6: continue
         assert spec['system']=='aarch64-darwin' and cpu==0x0100000c, 'native Mach-O target does not match selected system'
         result=subprocess.run(['nm','-gU',str(path)],check=True,capture_output=True,text=True)
         symbols={line.split()[-1].removeprefix('_') for line in result.stdout.splitlines() if len(line.split())>=3 and line.split()[-2] in ('T','W')}
     else: continue
+    diagnostic.update(nmArgv=result.args, nmExitCode=result.returncode,
+        nmStdout=result.stdout[:32768], nmStderr=result.stderr[:4096],
+        nmStdoutTruncated=len(result.stdout)>32768, nmStderrTruncated=len(result.stderr)>4096,
+        definedSymbolCount=len(symbols), selectedExportsFound=sorted(set(spec['exports']) & symbols),
+        selectedExportsMissing=sorted(set(spec['exports']) - symbols))
     if set(spec['exports'])<=symbols: matches.append((path,symbols))
+if len(matches)!=1:
+    # Report observations without changing candidate, architecture or export gates.
+    provider={'selected':shutil.which('nm')}
+    if provider['selected']:
+        try:
+            resolved=Path(provider['selected']).resolve(strict=True)
+            provider['resolved']=str(resolved)
+            if resolved.stat().st_size<=64*1024*1024:
+                digest=hashlib.sha256()
+                with resolved.open('rb') as file:
+                    for block in iter(lambda:file.read(65536),b''): digest.update(block)
+                provider['sha256']=digest.hexdigest()
+            else: provider['hashNotComputed']='provider exceeds 64 MiB diagnostic bound'
+        except OSError as error: provider['inspectionError']=str(error)[:1024]
+    print('NATIVE_EXPORT_DIAGNOSTIC '+json.dumps({'system':spec['system'],
+        'expectedExports':spec['exports'], 'matchingLibraries':len(matches),
+        'filesSeen':diagnostic_files, 'filesRetained':len(diagnostics),
+        'filesOmitted':diagnostic_files-len(diagnostics),
+        'nmProvider':provider, 'candidates':diagnostics},separators=(',',':')),flush=True)
 assert len(matches)==1, 'expected exactly one native library defining all selected owned exports'
 selected,symbols=matches[0]
 (out/'lib').mkdir(parents=True,exist_ok=True)
