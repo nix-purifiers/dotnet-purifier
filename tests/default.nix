@@ -20,6 +20,18 @@ let
   # from nuget.org.
   multi = build { src = ./fixtures/multi; };
 
+  # Inspect the real generated native publish command without realizing its tools.
+  nativeArgvProject = build {
+    src = ./fixtures/native42;
+    nativeProducts.answer = {
+      project = "Answer";
+      exports = [
+        "native_answer"
+        "native_collections"
+      ];
+    };
+  };
+
   # Packages from a second feed of nuget.config with package source
   # mapping, from a folder feed in the build's tree and from an MSBuild SDK
   # package; a build that runs a local tool; a self-contained executable
@@ -43,6 +55,20 @@ let
     };
     lockFile = ./real-world/fluentvalidation/dotnet-purifier.lock.json;
   };
+
+  # Preserve test-host diagnostics on failures in the controlled fixtures.
+  diagnoseTest = import ./test-diagnostics.nix { inherit lib; };
+  multiTestProjects = lib.mapAttrs (_: diagnoseTest) multi.tests.projects;
+  fluentvalidationTestProjects = lib.mapAttrs (_: diagnoseTest) fluentvalidation.tests.projects;
+
+  # Released .NET 11, independent of the RC in the primary package set.
+  # Exercise the public builder's toolchain override on maintained TFMs.
+  currentToolchain = import ./toolchains/released.nix { inherit (pkgs) dotnetCorePackages; };
+  current =
+    (build.override {
+      dotnetCorePackages = pkgs.dotnetCorePackages // currentToolchain;
+    })
+      { src = ./fixtures/current; };
 
   # A lockfile changed by `changes`, with its content hash computed again,
   # so that it fails only for the change.
@@ -176,6 +202,22 @@ in
       {
         nativeBuildInputs = [ pkgs.python3 ];
         DOTNET_PURIFIER_CLI = ../cli/dotnet_purifier.py;
+        DOTNET_PURIFIER_NATIVE_PUBLISH_PHASE = builtins.toFile "native-publish-phase.json" (
+          builtins.unsafeDiscardStringContext (
+            builtins.toJSON {
+              phase = nativeArgvProject.nativePackages.answer.installPhase;
+              darwin = pkgs.stdenv.hostPlatform.isDarwin;
+            }
+          )
+        );
+        DOTNET_PURIFIER_ICU_RETAINER = ./native/retain-icu-probe.py;
+        DOTNET_PURIFIER_NATIVE_LINK_CONTEXT = ../pkgs/dotnet-native-products/link-context.py;
+        DOTNET_PURIFIER_NATIVE_VERIFY = ../pkgs/dotnet-native-products/verify.py;
+        DOTNET_PURIFIER_RUNTIME_IDENTITY_HELPER = ./runtime-identity.py;
+        DOTNET_PURIFIER_BROWSER_RESOLVER = ./browser/resolve.py;
+        DOTNET_PURIFIER_NATIVE_CACHE_HELPER = ./native/cache_prerequisites.py;
+        DOTNET_PURIFIER_NATIVE_RELOCK_PROFILE = ./native/relock-profile.py;
+        DOTNET_PURIFIER_NATIVE_ARTIFACT_HELPER = ./native/artifact_profile.py;
         DOTNET_PURIFIER_WORKLOAD_MODE_HELPER = ../pkgs/dotnet-purifier/workload-mode.py;
         DOTNET_PURIFIER_NIX_LIB = ../pkgs/build-dotnet-project;
       }
@@ -212,9 +254,31 @@ in
   conformance-external = external.packages.App;
   conformance-external-packages-lock = externalPackagesLock.packages.App;
 
+  current-app = current.packages.App;
+  current-app11 = current.packages.App11;
+  # Observational only: the original App success checks below stay mandatory.
+  ${if pkgs.stdenv.hostPlatform.isDarwin then "current-icu-store-diagnostic" else null} =
+    import ../design/icu-store/probe.nix
+      {
+        inherit pkgs;
+        app = current.packages.App;
+        runtime = currentToolchain.runtime_10_0;
+      };
+  current-app-runs =
+    prints "current-app-runs" "${current.packages.App}/bin/App"
+      ''{"runtime":"10.0.15","value":"locked"}'';
+  current-app11-runs =
+    prints "current-app11-runs" "${current.packages.App11}/bin/App11"
+      ''{"runtime":"11.0.0","value":"locked"}'';
+
   multi-app = multi.packages.App;
   multi-greeter = multi.packages.Greeter;
   multi-tests = multi.tests;
+  multi-tests-native = multiTestProjects."Greeter.Tests";
+  test-network-boundary = import ./test-network.nix {
+    inherit pkgs;
+    testProject = multi.tests.projects."Greeter.Tests";
+  };
 
   # The executable runs on the .NET runtime and reaches both its project
   # reference and its NuGet dependency.
@@ -259,7 +323,9 @@ in
         </Project>
         EOF
         echo 'System.Console.WriteLine(Example.Greeter.Greeting.For("Grace", 1));' > consumer/Program.cs
-        dotnet build consumer -p:RestoreSources="$PWD/feed;${multi.packageFolder}" -o out
+        # Without a PID namespace, as on Darwin, Nix waits for every process
+        # that holds the build log open, so no build server may outlive dotnet.
+        dotnet build consumer --disable-build-servers -p:RestoreSources="$PWD/feed;${multi.packageFolder}" -o out
         output="$(dotnet out/Consumer.dll)"
         test "$output" = "Hello, Grace! You have 1 message."
         touch "$out"
@@ -298,6 +364,7 @@ in
   realworld-fluentvalidation-benchmarks =
     fluentvalidation.packages."FluentValidation.Tests.Benchmarks";
   realworld-fluentvalidation-tests = fluentvalidation.tests;
+  realworld-fluentvalidation-tests-native = fluentvalidationTestProjects."FluentValidation.Tests";
 }
 // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
   sources-standalone = sources.packages.Standalone;

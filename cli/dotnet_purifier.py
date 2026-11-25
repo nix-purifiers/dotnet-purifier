@@ -1222,16 +1222,22 @@ def path_option(args, flag, variable):
     return None
 
 
-def main():
-    global LOCK_OVERRIDE, TOOL_LOCK_OVERRIDE
+def default_darwin_tempdir():
     # On macOS, Nix unsets TMPDIR when it lies in /var/folders, where macOS
     # puts every user's, so this command has none when `nix run` or
     # `nix shell` starts it. Without TMPDIR the .NET runtime of macOS
     # cannot create a named mutex, and the SDK fails before it runs a
     # command, so every dotnet gets the directory Python's temporary files
     # use.
-    if sys.platform == "darwin":
-        os.environ.setdefault("TMPDIR", tempfile.gettempdir())
+    # Keep an explicit caller value, including an empty one. Canonicalize only
+    # our default so directory opens need not follow a final symlink.
+    if sys.platform == "darwin" and "TMPDIR" not in os.environ:
+        os.environ["TMPDIR"] = str(Path(tempfile.gettempdir()).resolve())
+
+
+def main():
+    global LOCK_OVERRIDE, TOOL_LOCK_OVERRIDE
+    default_darwin_tempdir()
     args = sys.argv[1:]
     LOCK_OVERRIDE = path_option(args, "--lockfile", "DOTNET_PURIFIER_LOCKFILE")
     TOOL_LOCK_OVERRIDE = path_option(args, "--tool-lockfile", "DOTNET_PURIFIER_TOOL_LOCKFILE")

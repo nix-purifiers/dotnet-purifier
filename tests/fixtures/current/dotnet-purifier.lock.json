@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "sdk": {
+    "version": "11.0.100",
+    "major": 11
+  },
+  "targets": [
+    "App/App.csproj",
+    "App11/App11.csproj"
+  ],
+  "definitionHash": "sha256-oYIO8BgUhv4SQs7vyRYS23gKWg1J0o/3SxC6kYgFydE=",
+  "tools": false,
+  "workloads": [],
+  "projects": [
+    {
+      "name": "App",
+      "path": "App/App.csproj",
+      "kind": "exe",
+      "assemblyName": "App",
+      "targetFrameworks": [
+        "net10.0"
+      ],
+      "frameworkReferences": [
+        "Microsoft.NETCore.App"
+      ],
+      "selfContained": false,
+      "runtimeIdentifier": "",
+      "artifacts": [
+        "bin/App"
+      ]
+    },
+    {
+      "name": "App11",
+      "path": "App11/App11.csproj",
+      "kind": "exe",
+      "assemblyName": "App11",
+      "targetFrameworks": [
+        "net11.0"
+      ],
+      "frameworkReferences": [
+        "Microsoft.NETCore.App"
+      ],
+      "selfContained": false,
+      "runtimeIdentifier": "",
+      "artifacts": [
+        "bin/App11"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "microsoft.aspnetcore.app.ref/10.0.15/microsoft.aspnetcore.app.ref.10.0.15.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.ref/10.0.15/microsoft.aspnetcore.app.ref.10.0.15.nupkg",
+      "mirrors": [],
+      "hash": "sha512-scmS5owAPL7EYn5egcNtAU4AbuMFmOCkpf26W9m2GRgosPd6bL1KurB4jRADbfc0jOeBjuII6oxK3/EnOUBstA=="
+    },
+    {
+      "path": "microsoft.netcore.app.ref/10.0.15/microsoft.netcore.app.ref.10.0.15.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/10.0.15/microsoft.netcore.app.ref.10.0.15.nupkg",
+      "mirrors": [],
+      "hash": "sha512-fS+R/OlE7AEqsnQ5FzHYUAR5dw4l3jF4eXpmk8dCCas0BFRd4LNlpzZ4BYcLoOOY3IM7JuEoF/1gwdgr8rfF8Q=="
+    },
+    {
+      "path": "newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg",
+      "url": "https://api.nuget.org/v3-flatcontainer/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg",
+      "mirrors": [],
+      "hash": "sha512-mbJSvHfRxfX3tR/U6n1WU+mWHXswYc+SB/hkOpx8yZZe68hNZGfymJu0cjsaJEkVzCMqePiU6LdIyogqfIn7kg=="
+    }
+  ],
+  "localPackages": [],
+  "sdkPackages": [],
+  "contentHash": "sha256-avaRH7I8TjWdBPMFtleILpxHXKnX2zg3+0PnPiqYwQY="
+}

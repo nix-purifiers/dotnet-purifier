@@ -64,6 +64,10 @@
   openssl,
   zlib,
   clang,
+  cctools,
+  darwin,
+  apple-sdk,
+  swiftPackages,
   krb5,
 }:
 {
@@ -259,12 +263,20 @@ let
     chmod 700 "$XDG_RUNTIME_DIR"
     cp -rs --no-preserve=mode ${packageFolder}/. "$NUGET_PACKAGES"
     ${lib.optionalString lock.tools "dotnet tool restore --configfile ${toolConfig}"}
-    ${lib.optionalString (lock.workloads != [ ]) ''
-      python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
-      dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
-        --source ${packageFolder}
-      ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}
-    ''}
+    ${
+      lib.optionalString (lock.workloads != [ ] && stdenv.hostPlatform.isDarwin) ''
+        # Workload Node must not depend on the host's OpenSSL configuration.
+        # Keep an explicit configuration (including an explicit empty value).
+        export OPENSSL_CONF="''${OPENSSL_CONF-${writeText "dotnet-workload-openssl.cnf" "# No host OpenSSL configuration for sandboxed workloads.\n"}}"
+      ''
+    }${
+      lib.optionalString (lock.workloads != [ ]) ''
+        python3 ${../../pkgs/dotnet-purifier/workload-mode.py} ${lib.getExe' sdk "dotnet"}
+        dotnet workload install ${lib.escapeShellArgs lock.workloads} --skip-manifest-update \
+          --source ${packageFolder}
+        ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$HOME/.dotnet/packs"''}
+      ''
+    }
   ''
   + lib.optionalString stdenv.hostPlatform.isDarwin ''
     # The compilers record the paths of the sources and of the PDB in the
@@ -490,6 +502,10 @@ let
     p:
     mkBuild p {
       dotnetSdk = testSdk p;
+      # VSTest's test host uses a localhost TCP channel. Permit loopback
+      # on Darwin, where the default sandbox forbids even local sockets.
+      # External networking remains denied by the Nix sandbox.
+      __darwinAllowLocalNetworking = stdenv.hostPlatform.isDarwin;
       installPhase = ''
         runHook preInstall
         ${dotnetSetup}
@@ -534,6 +550,12 @@ let
     globalJson =
       if builtins.pathExists "${filteredSrc}/global.json" then "${filteredSrc}/global.json" else null;
   };
+  # Select only strip: the SDK uses Apple-specific flags, while the default
+  # bintools strip may be LLVM. Do not replace the linker or dsymutil.
+  nativeDarwinStrip = runCommand "dotnet-native-apple-strip" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${cctools}/bin/strip "$out/bin/strip"
+  '';
   nativePackages = lib.mapAttrs (
     name: options:
     let
@@ -572,7 +594,24 @@ let
       buildInputs = [
         zlib
         stdenv.cc.cc.lib
+      ]
+      # The macOS SDK contains overlay stubs, but Swift's core stub is
+      # supplied by the standard-library development output.
+      ++ lib.optionals stdenv.hostPlatform.isDarwin [
+        swiftPackages.stdlib.dev
+        darwin.ICU
       ];
+      # Test paths copy these exact inputs from the binary cache, without building.
+      ${if stdenv.hostPlatform.isDarwin then "nativeLinkPrerequisites" else null} = [
+        swiftPackages.stdlib.dev
+        apple-sdk
+        darwin.ICU.dev
+        cctools
+      ];
+      ${if stdenv.hostPlatform.isDarwin then "failureHook" else null} = ''
+        python3 ${../dotnet-native-products/link-context.py} failure \
+          --directory "$TMPDIR/native-link-context" --log "$TMPDIR/native-link.log"
+      '';
       runtimeDependencies = map lib.getLib runtimeLibraries;
       dontAutoPatchelf = true;
       dontPatchELF = true;
@@ -596,15 +635,31 @@ let
       installPhase = ''
         runHook preInstall
         ${dotnetSetup}
-        hostRid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
+        ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          export PATH="${nativeDarwinStrip}/bin:$PATH"
+          # NativeAOT asks for Swift overlays under /usr/lib/swift. Use
+          # the immutable SDK's overlay stubs alongside the core input.
+          export NIX_LDFLAGS="''${NIX_LDFLAGS-} -L${apple-sdk.sdkroot}/usr/lib/swift"
+        ''}hostRid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
         compilerPackages=$(python3 ${../dotnet-native-products/prepare-tools.py} "$NUGET_PACKAGES" "$hostRid")
         ${lib.optionalString stdenv.hostPlatform.isLinux ''autoPatchelf "$compilerPackages"''}
         rid=${lib.escapeShellArg p.nativePublish.runtimeIdentifier}
         ${lib.optionalString (p.nativePublish.runtimeIdentifierSource == "sdk-host") ''
           rid=$(dotnet msbuild ${lib.escapeShellArg p.path} -getProperty:NETCoreSdkPortableRuntimeIdentifier)
         ''}
-        dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
-          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"
+        ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          python3 ${../dotnet-native-products/link-context.py} capture \
+            --directory "$TMPDIR/native-link-context" --icu "${lib.getLib darwin.ICU}/lib/libicucore.dylib" \
+            --nix-minimum ${lib.escapeShellArg stdenv.hostPlatform.darwinMinVersion} \
+            --core-stubs "${swiftPackages.stdlib.dev}/lib/libswiftCore.tbd" --overlay-sdk "${apple-sdk.sdkroot}" \
+            --strip "${cctools}/bin/strip" --strip-version ${lib.escapeShellArg cctools.version}
+          dotnet --info > "$TMPDIR/native-link-context/dotnet-info.txt"
+        ''}dotnet publish ${lib.escapeShellArg p.path} -f ${lib.escapeShellArg framework} -r "$rid" \
+          ${lib.escapeShellArgs buildProperties} -o "$TMPDIR/native-publish"${
+            lib.optionalString stdenv.hostPlatform.isDarwin (
+              " " + ''-fl "-flp:LogFile=$TMPDIR/native-link.log;Verbosity=diagnostic"''
+            )
+          }
         assembly=$(dotnet msbuild ${lib.escapeShellArg p.path} -p:RuntimeIdentifier="$rid" -p:TargetFramework=${lib.escapeShellArg framework} \
           ${lib.escapeShellArgs buildProperties} -getProperty:TargetPath)
         input=$(python3 ${../dotnet-native-products/resolve-input.py} "$assembly" ${lib.escapeShellArg framework} "$TMPDIR/compiler-input.json")
@@ -612,7 +667,12 @@ let
         python3 ${../dotnet-native-products/verify.py} "$nativeSpecPath" "$TMPDIR/native-publish" "$TMPDIR/managed-exports.json" "$out" "$input"
         cp "$TMPDIR/compiler-input.json" "$out/native-proof/compiler-input.json"
         cp "$assembly" "$out/native-proof/build-target.dll"
-        runHook postInstall
+        ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+          cp "$TMPDIR/native-link.log" "$out/native-proof/native-link.log"
+          python3 ${../dotnet-native-products/link-context.py} assess \
+            --directory "$TMPDIR/native-link-context" --log "$TMPDIR/native-link.log" --published "$out/${library}"
+          cp "$TMPDIR/native-link-context/"{link-environment.json,dotnet-info.txt,deployment.json} "$out/native-proof/"
+        ''}runHook postInstall
       '';
     }
   ) nativeProducts;

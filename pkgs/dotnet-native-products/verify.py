@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Bind owned managed PE export metadata to an actual native shared library."""
+import base64
 import hashlib
 import json
 import re
@@ -8,6 +9,58 @@ import shutil
 import struct
 import subprocess
 import sys
+
+def retain_failed_candidates(candidates):
+    """Failure-only data receipt; never executes bytes or changes export acceptance.
+
+    Failed Nix outputs may be removed. Full build logs retain this bounded
+    transport independently of output realization. Decode only as inert data.
+    """
+    remaining=4*1024*1024
+    for relative,data in candidates[:2]:
+        if len(data)>2*1024*1024 or len(data)>remaining:
+            print('NATIVE_EXPORT_BYTES_SKIPPED '+json.dumps({'path':relative,
+                'size':len(data),'reason':'candidate byte bound'}),flush=True)
+            continue
+        remaining-=len(data)
+        digest=hashlib.sha256(data).hexdigest()
+        chunks=(len(data)+32767)//32768
+        print('NATIVE_EXPORT_BYTES_MANIFEST '+json.dumps({'path':relative,
+            'size':len(data),'sha256':digest,'chunks':chunks,'encoding':'base64',
+            'nativeSuccessClaimed':False},separators=(',',':')),flush=True)
+        for index in range(chunks):
+            print('NATIVE_EXPORT_BYTES_CHUNK '+json.dumps({'sha256':digest,'index':index,
+                'data':base64.b64encode(data[index*32768:(index+1)*32768]).decode('ascii')},
+                separators=(',',':')),flush=True)
+
+def section_diagnostics(data):
+    """Observe Mach-O sections; malformed/large metadata never becomes acceptance."""
+    try:
+        count,size=struct.unpack_from('<II',data,16)
+        if count>256 or size>1024*1024 or 32+size>len(data):
+            return {'inspectionError':'load-command diagnostic bound'}
+        offset=32; sections=[]
+        for _ in range(count):
+            command,length=struct.unpack_from('<II',data,offset)
+            if length<8 or offset+length>32+size:
+                return {'inspectionError':'invalid load-command bounds'}
+            if command==0x19:
+                if length<72: return {'inspectionError':'short segment command'}
+                nsections=struct.unpack_from('<I',data,offset+64)[0]
+                if 72+nsections*80>length or len(sections)+nsections>256:
+                    return {'inspectionError':'section diagnostic bound'}
+                protection=struct.unpack_from('<I',data,offset+60)[0]
+                for index in range(nsections):
+                    row=offset+72+index*80
+                    name,segment,address,size_bytes=struct.unpack_from('<16s16sQQ',data,row)
+                    flags=struct.unpack_from('<I',data,row+64)[0]
+                    sections.append({'name':name.split(b'\0')[0].decode('ascii',errors='replace'),
+                        'segment':segment.split(b'\0')[0].decode('ascii',errors='replace'),
+                        'address':address,'size':size_bytes,'flags':flags,'segmentInitialProtection':protection})
+            offset+=length
+        return {'sections':sections}
+    except struct.error:
+        return {'inspectionError':'truncated section metadata'}
 
 spec=json.loads(Path(sys.argv[1]).read_text())
 published=Path(sys.argv[2]).resolve(strict=True)
@@ -21,13 +74,22 @@ for name in spec['exports']:
     assert not conventions or conventions==['System.Runtime.CompilerServices.CallConvCdecl'], 'export is not a platform C ABI: '+name
 
 matches=[]
+diagnostics=[]
+failed_candidates=[]
+diagnostic_files=0
 for path in published.rglob('*'):
     if not path.is_file(): continue
     assert path.resolve().is_relative_to(published), 'native publish symlink escapes output'
-    magic=path.read_bytes()[:32]
+    data=path.read_bytes()
+    magic=data[:32]
+    diagnostic_files+=1
+    diagnostic={'path':str(path.relative_to(published)), 'magic':magic[:8].hex(),
+                'size':path.stat().st_size}
+    if len(diagnostics)<64: diagnostics.append(diagnostic)
     if magic[:4]==b'\x7fELF':
         assert magic[4:6]==b'\x02\x01', 'expected 64-bit little-endian native library'
         kind,machine=struct.unpack_from('<HH',magic,16)
+        diagnostic.update(format='ELF',kind=kind,machine=machine)
         if kind!=3: continue
         expected={'x86_64-linux':62,'aarch64-linux':183}.get(spec['system'])
         assert machine==expected, 'native ELF target does not match selected system'
@@ -35,12 +97,55 @@ for path in published.rglob('*'):
         symbols={line.split()[0].split('@')[0] for line in result.stdout.splitlines() if len(line.split())>=2 and line.split()[1] in ('T','W')}
     elif magic[:4]==b'\xcf\xfa\xed\xfe':
         cpu,subtype,kind=struct.unpack_from('<III',magic,4)
+        diagnostic.update(format='Mach-O',kind=kind,cpu=cpu)
+        diagnostic.update(section_diagnostics(data))
         if kind!=6: continue
         assert spec['system']=='aarch64-darwin' and cpu==0x0100000c, 'native Mach-O target does not match selected system'
         result=subprocess.run(['nm','-gU',str(path)],check=True,capture_output=True,text=True)
         symbols={line.split()[-1].removeprefix('_') for line in result.stdout.splitlines() if len(line.split())>=3 and line.split()[-2] in ('T','W')}
+        # Retain only declared-export-bearing produced arm64 dylibs on failure.
+        observed={line.split()[-1].removeprefix('_') for line in result.stdout.splitlines()
+                  if len(line.split())==3 and line.split()[-2] in ('T','W','S')}
+        if (path.name==spec['assembly']+'.dylib' and not path.is_symlink()
+                and set(spec['exports']) & observed and len(failed_candidates)<2):
+            if len(data)<=2*1024*1024 and sum(len(value) for _,value in failed_candidates)+len(data)<=4*1024*1024:
+                failed_candidates.append((str(path.relative_to(published)),data))
+            else:
+                diagnostic['candidateBytesSkipped']='candidate byte bound'
     else: continue
+    diagnostic.update(nmArgv=result.args, nmExitCode=result.returncode,
+        nmStdout=result.stdout[:32768], nmStderr=result.stderr[:4096],
+        nmStdoutTruncated=len(result.stdout)>32768, nmStderrTruncated=len(result.stderr)>4096,
+        definedSymbolCount=len(symbols), selectedExportsFound=sorted(set(spec['exports']) & symbols),
+        selectedExportsMissing=sorted(set(spec['exports']) - symbols))
     if set(spec['exports'])<=symbols: matches.append((path,symbols))
+if len(matches)!=1:
+    retention_error=None
+    try:
+        retain_failed_candidates(failed_candidates)
+    except Exception as error:
+        # Retention must never turn a failed cardinality check into success.
+        # Do not let a best-effort transport error replace that original gate.
+        retention_error=type(error).__name__
+    # Report observations without changing candidate, architecture or export gates.
+    provider={'selected':shutil.which('nm')}
+    if provider['selected']:
+        try:
+            resolved=Path(provider['selected']).resolve(strict=True)
+            provider['resolved']=str(resolved)
+            if resolved.stat().st_size<=64*1024*1024:
+                digest=hashlib.sha256()
+                with resolved.open('rb') as file:
+                    for block in iter(lambda:file.read(65536),b''): digest.update(block)
+                provider['sha256']=digest.hexdigest()
+            else: provider['hashNotComputed']='provider exceeds 64 MiB diagnostic bound'
+        except OSError as error: provider['inspectionError']=str(error)[:1024]
+    print('NATIVE_EXPORT_DIAGNOSTIC '+json.dumps({'system':spec['system'],
+        'expectedExports':spec['exports'], 'matchingLibraries':len(matches),
+        'filesSeen':diagnostic_files, 'filesRetained':len(diagnostics),
+        'filesOmitted':diagnostic_files-len(diagnostics),
+        'nmProvider':provider, 'candidates':diagnostics,
+        'candidateByteRetentionError':retention_error},separators=(',',':')),flush=True)
 assert len(matches)==1, 'expected exactly one native library defining all selected owned exports'
 selected,symbols=matches[0]
 (out/'lib').mkdir(parents=True,exist_ok=True)

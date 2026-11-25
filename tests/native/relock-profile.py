@@ -5,7 +5,11 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
+
+from artifact_profile import shared_library, validate_artifacts
+from cache_prerequisites import ensure
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--repo', type=Path, required=True)
@@ -23,6 +27,7 @@ first_bytes = args.capture.read_bytes()
 (out / 'capture-1.lock.json').write_bytes(first_bytes)
 golden, first = json.loads(golden_bytes), json.loads(first_bytes)
 cli = ['nix', 'run', str(repo) + '#default', '--']
+prerequisites = ensure(repo, out / 'link-prerequisites')
 
 
 def checked_lock(path):
@@ -45,6 +50,8 @@ def checked_lock(path):
 # definition checks. Keep all RID/hash bytes in the retained artifacts.
 readers = {'committed': checked_lock(out/'committed-capture.lock.json'),
            'first': checked_lock(out/'capture-1.lock.json')}
+
+
 # Complete the installed CLI's native preparation before capturing the SDK
 # property's JSON stream. Prefetch may itself emit setup output.
 subprocess.run(cli+['prefetch'],cwd=fixture,check=True)
@@ -67,6 +74,13 @@ for index, project in enumerate(first['projects']):
     observations[project['name']] = {'command':command,'properties':properties}
     if old['runtimeIdentifier'] != rid:
         expected_changes.add(('projects',index,'nativePublish','runtimeIdentifier'))
+    # The host operating system names the published library and its debug
+    # symbols, so a capture on another OS records other artifact paths.
+    validate_artifacts(golden['projects'][index]['assemblyName'],
+                       old['runtimeIdentifier'], old['artifacts'])
+    validate_artifacts(project['assemblyName'], rid, native['artifacts'])
+    if shared_library(old['runtimeIdentifier']) != shared_library(rid):
+        expected_changes.add(('projects',index,'nativePublish','artifacts'))
 assert observations
 if expected_changes:
     expected_changes.add(('contentHash',))
@@ -78,6 +92,8 @@ def differences(a,b,path=()):
     if isinstance(a,dict):
         assert set(a)==set(b), (path,set(a),set(b))
         return set().union(*(differences(a[k],b[k],path+(k,)) for k in a))
+    if isinstance(a,list) and path[-2:]==('nativePublish','artifacts'):
+        return set() if a==b else {path}
     if isinstance(a,list):
         assert len(a)==len(b), path
         return set().union(*(differences(x,y,path+(i,)) for i,(x,y) in enumerate(zip(a,b))))
@@ -96,10 +112,61 @@ readers['second'] = checked_lock(second_path)
 assert (fixture/'dotnet-purifier.lock.json').read_bytes() == first_bytes
 system = subprocess.check_output(['nix','eval','--impure','--raw','--expr','builtins.currentSystem'],text=True).strip()
 check = 'native-multi' if args.fixture == 'native-multi' else 'native-ffi'
-replay_command = ['nix','build','--no-link','--print-out-paths',str(repo)+'#checks.'+system+'.'+check]
-replay_outputs = subprocess.check_output(replay_command,text=True).splitlines()
+replay_command = ['nix','build','-L','--no-link','--print-out-paths',str(repo)+'#checks.'+system+'.'+check]
+proof_names = ('link-environment.json', 'dotnet-info.txt', 'native-link.log', 'deployment.json')
+producers = []
+if platform.system() == 'Darwin':
+    producer_ref = str(repo) + '#checks.' + system + '.' + check + '.nativeProofProducers'
+    producers = json.loads(subprocess.check_output([
+        'nix', 'eval', '--json', '--option', 'allow-import-from-derivation', 'false',
+        producer_ref, '--apply', 'map toString'], text=True))
+try:
+    replay_outputs = subprocess.check_output(replay_command,text=True).splitlines()
+finally:
+    # A completed producer remains useful evidence if loading/calling it fails.
+    # Retain only diagnostics here; the replay exception must still fail the job.
+    diagnostics = []
+    for value in producers:
+        producer = Path(value)
+        item = {'producer': value, 'retained': []}
+        if producer.exists():
+            try:
+                item['outputMetadata'] = json.loads(subprocess.check_output(
+                    ['nix', 'path-info', '--json', str(producer)], text=True))
+                target = out / 'native-link-receipts' / producer.name
+                target.mkdir(parents=True, exist_ok=True)
+                for name in proof_names:
+                    source = producer / 'native-proof' / name
+                    if source.is_file():
+                        shutil.copyfile(source, target / name)
+                        item['retained'].append(name)
+            except Exception as error:
+                item['diagnosticError'] = str(error)
+        diagnostics.append(item)
+    if producers:
+        (out / 'native-link-diagnostics.json').write_text(json.dumps({
+            'nativeReplaySuccessClaimed': False, 'producers': diagnostics,
+        }, indent=2) + '\n')
 assert replay_outputs
+link_receipts = []
+if platform.system() == 'Darwin':
+    for index, output in enumerate(replay_outputs):
+        consumer = Path(output) / 'proof.json'
+        proof = json.loads(consumer.read_text())
+        shutil.copyfile(consumer, out / ('native-consumer-proof-' + str(index) + '.json'))
+        shutil.copyfile(Path(output) / 'deployment-receipt.json',
+                        out / ('native-deployment-proof-' + str(index) + '.json'))
+        rows = proof if isinstance(proof, list) else [proof]
+        for row in rows:
+            producer = Path(row['producer'])
+            target = out / 'native-link-receipts' / producer.name
+            target.mkdir(parents=True, exist_ok=True)
+            for name in proof_names:
+                assert (target / name).stat().st_size > 0, target / name
+            link_receipts.append(str(target.relative_to(out)))
 (out/'verification.json').write_text(json.dumps({
+    'nativeLinkPrerequisites':prerequisites,
+    'nativeLinkReceiptDirectories':sorted(set(link_receipts)),
     'fixture':args.fixture,'machine':platform.machine(),'sdkObservations':observations,
     'changedPaths':[list(p) for p in sorted(actual_changes,key=str)],
     'committedContentHash':golden['contentHash'],'capturedContentHash':first['contentHash'],
