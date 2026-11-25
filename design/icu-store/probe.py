@@ -22,14 +22,17 @@ def load(name, path):
     return module
 
 
-def run(argv, cwd, env, timeout=15, limit=65536):
+def run(argv, cwd, env, timeout=15, limit=65536, separate_stderr=False):
     child = subprocess.Popen(argv, cwd=cwd, env=env, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
+                             stderr=subprocess.PIPE if separate_stderr else subprocess.STDOUT)
     output = bytearray()
+    errors = bytearray()
     reason = None
     deadline = time.monotonic() + timeout
     with selectors.DefaultSelector() as selector:
-        selector.register(child.stdout, selectors.EVENT_READ)
+        selector.register(child.stdout, selectors.EVENT_READ, 'stdout')
+        if separate_stderr:
+            selector.register(child.stderr, selectors.EVENT_READ, 'stderr')
         while selector.get_map():
             if time.monotonic() >= deadline:
                 reason = 'timeout'
@@ -39,8 +42,9 @@ def run(argv, cwd, env, timeout=15, limit=65536):
                 if not data:
                     selector.unregister(key.fileobj)
                     continue
-                remaining = limit - len(output)
-                output.extend(data[:remaining])
+                remaining = limit - len(output) - len(errors)
+                target = errors if key.data == 'stderr' else output
+                target.extend(data[:remaining])
                 if len(data) > remaining:
                     reason = 'output-limit'
                     break
@@ -55,8 +59,13 @@ def run(argv, cwd, env, timeout=15, limit=65536):
         child.kill()
         code = child.wait()
     child.stdout.close()
-    return dict(argv=argv, cwd=str(cwd), exitCode=code, stopReason=reason,
-                output=output.decode('utf-8', errors='replace'))
+    if separate_stderr:
+        child.stderr.close()
+    row = dict(argv=argv, cwd=str(cwd), exitCode=code, stopReason=reason,
+               output=output.decode('utf-8', errors='replace'))
+    if separate_stderr:
+        row['stderr'] = errors.decode('utf-8', errors='replace')
+    return row
 
 
 def classify(row):

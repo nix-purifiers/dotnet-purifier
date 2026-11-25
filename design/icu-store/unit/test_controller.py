@@ -72,6 +72,44 @@ class Controller(unittest.TestCase):
         self.assertEqual(result['stopReason'], 'monitor-error')
         self.assertIn('sampler denied', result['monitorError'])
 
+    def test_failed_sampler_retains_status_stderr_without_global_stdout(self):
+        def denied(ps, group, bounded_run, cwd, env):
+            def fake(argv, cwd, env, **bounds):
+                self.assertEqual(bounds, dict(timeout=1, limit=262144, separate_stderr=True))
+                return dict(argv=argv, exitCode=2, stopReason=None,
+                    output='GLOBAL_LISTING_NOT_FOR_RETENTION', stderr='denied '*1000)
+            return controller.sample(ps, group, fake, cwd, env)
+        result = self.call('import time;time.sleep(5)', sampler=denied)
+        self.assertEqual(result['stopReason'], 'monitor-error')
+        self.assertFalse(result['success'])
+        self.assertEqual(result['samples'], 0)
+        row = result['monitorSample']
+        self.assertEqual(row['argv'][1:], ['-A', '-o', 'pid=,ppid=,pgid=,rss='])
+        self.assertEqual(row['exitCode'], 2)
+        self.assertEqual(len(row['stderr']), 4096)
+        self.assertTrue(row['stderrTruncated'])
+        self.assertFalse(row['stdoutRetained'])
+        self.assertNotIn('GLOBAL_LISTING', str(result))
+
+    def test_malformed_sampler_output_retains_no_process_listing(self):
+        def fake(argv, *args, **kwargs):
+            return dict(argv=argv, exitCode=0, stopReason=None,
+                        output='UNEXPECTED_PRIVATE_LISTING', stderr='format warning')
+        with self.assertRaisesRegex(controller.SampleError, 'numeric ps format') as caught:
+            controller.sample('/selected/ps', 42, fake, Path.cwd(), os.environ)
+        self.assertEqual(caught.exception.diagnostic['exitCode'], 0)
+        self.assertNotIn('UNEXPECTED_PRIVATE', str(caught.exception.diagnostic))
+
+    def test_stopped_sampler_is_not_accepted_after_zero_exit(self):
+        def stopped(ps, group, bounded_run, cwd, env):
+            def fake(argv, *args, **kwargs):
+                return dict(argv=argv, exitCode=0, stopReason='output-limit', output='', stderr='')
+            return controller.sample(ps, group, fake, cwd, env)
+        result = self.call('import time;time.sleep(5)', sampler=stopped)
+        self.assertEqual(result['stopReason'], 'monitor-error')
+        self.assertFalse(result['success'])
+        self.assertEqual(result['monitorSample']['stopReason'], 'output-limit')
+
     def test_zero_rss_for_live_helper_is_not_accepted_as_monitoring(self):
         def unavailable(ps, group, *args):
             return [{'pid': group, 'parent': os.getpid(), 'group': group, 'rssBytes': 0}]

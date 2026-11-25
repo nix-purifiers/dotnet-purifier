@@ -27,6 +27,21 @@ class BoundedProbe(unittest.TestCase):
         self.assertEqual(row['stopReason'], 'output-limit')
         self.assertEqual(len(row['output']), 100)
 
+    def test_separate_stderr_preserves_stdout_json(self):
+        row = probe.run([sys.executable, '-c',
+                         'import sys;print("{\\\"ok\\\":true}");print("ps warning",file=sys.stderr)'],
+                        Path.cwd(), os.environ, separate_stderr=True)
+        self.assertEqual(row['exitCode'], 0)
+        self.assertEqual(row['output'].strip(), '{"ok":true}')
+        self.assertEqual(row['stderr'].strip(), 'ps warning')
+
+    def test_separate_streams_share_one_output_bound(self):
+        row = probe.run([sys.executable, '-c',
+                         'import os;os.write(1,b"a"*50);os.write(2,b"b"*10000)'],
+                        Path.cwd(), os.environ, limit=100, separate_stderr=True)
+        self.assertEqual(row['stopReason'], 'output-limit')
+        self.assertEqual(len(row['output'])+len(row['stderr']), 100)
+
     def test_deadline_stops_owned_child(self):
         row = probe.run([sys.executable, '-c', 'import time;time.sleep(5)'], Path.cwd(), os.environ, timeout=0.1)
         self.assertEqual(row['stopReason'], 'timeout')

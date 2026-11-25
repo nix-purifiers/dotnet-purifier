@@ -44,11 +44,27 @@ def ps_rows(text, group):
     return rows
 
 
+class SampleError(RuntimeError):
+    def __init__(self, message, diagnostic):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
 def sample(ps, group, bounded_run, cwd, env):
     row = bounded_run([ps, '-A', '-o', 'pid=,ppid=,pgid=,rss='], cwd, env,
-                      timeout=1, limit=262144)
-    assert row['exitCode'] == 0 and row['stopReason'] is None, 'resource ps unavailable or bounded out'
-    return ps_rows(row['output'], group)
+                      timeout=1, limit=262144, separate_stderr=True)
+    # Never retain the global process listing. Exact argv/status and bounded
+    # stderr identify monitor failures without publishing other process groups.
+    diagnostic = dict(argv=row['argv'], exitCode=row['exitCode'], stopReason=row['stopReason'],
+                      stderr=row['stderr'][:4096], stderrTruncated=len(row['stderr'])>4096,
+                      stdoutRetained=False,
+                      timeoutSeconds=1, combinedOutputLimitBytes=262144)
+    if row['exitCode'] != 0 or row['stopReason'] is not None:
+        raise SampleError('resource ps unavailable or bounded out', diagnostic)
+    try:
+        return ps_rows(row['output'], group)
+    except AssertionError as error:
+        raise SampleError(str(error), diagnostic) from error
 
 
 def kill_group(group):
@@ -133,6 +149,8 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
         except Exception as error:
             reason = 'monitor-error'
             receipt['monitorError'] = str(error)[:2048]
+            if isinstance(error, SampleError):
+                receipt['monitorSample'] = error.diagnostic
         finally:
             # Process group was created by this controller; no external process IDs
             # or name matching are used. A descendant that changes its process
