@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Execute the verifier with synthetic headers and a stand-in nm, never native code."""
 import contextlib
+import base64
 import hashlib
 import io
 import json
@@ -30,7 +31,7 @@ class NativeExportDiagnostics(unittest.TestCase):
                 cwd=tmp, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
 
-    def execute(self, rows, nm_stdout='0000000000001234 T _native_answer\n', section_flags=None):
+    def execute(self, rows, nm_stdout='0000000000001234 T _native_answer\n', section_flags=None, extra_bytes=b''):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             published = root / 'publish'; published.mkdir()
@@ -40,7 +41,7 @@ class NativeExportDiagnostics(unittest.TestCase):
                     data = struct.pack('<IIIIIIII', 0xfeedfacf, 0x0100000c, 0, kind, 1, 152, 0, 0)
                     data += struct.pack('<II16sQQQQiiII', 0x19, 152, b'__TEXT', 0x1000, 0x1000, 0, 0, 5, 5, 1, 0)
                     data += struct.pack('<16s16sQQIIIIIIII', b'__managedcode', b'__TEXT', 0x1234, 0x40, 0, 2, 0, 0, section_flags, 0, 0, 0)
-                (published / name).write_bytes(data)
+                (published / name).write_bytes(data+extra_bytes)
             assembly = root / 'Answer.dll'; assembly.write_bytes(b'stand-in managed compiler input')
             (root / 'Answer.ilc.rsp').write_text('stand-in response graph')
             spec = dict(assembly='Answer', exports=['native_answer'], system='aarch64-darwin', library='libanswer.dylib', name='answer')
@@ -64,7 +65,70 @@ class NativeExportDiagnostics(unittest.TestCase):
                 os.chdir(previous)
             record = json.loads((root/'out/native-products.json').read_text()) if (root/'out/native-products.json').exists() else None
             diagnostics = [json.loads(line.split(' ', 1)[1]) for line in output.getvalue().splitlines() if line.startswith('NATIVE_EXPORT_DIAGNOSTIC ')]
+            self.last_output=output.getvalue()
             return error, calls, diagnostics, record
+
+    def test_failed_s_candidate_bytes_are_exact_and_failure_is_preserved(self):
+        error, _, _, record = self.execute([('Answer.dylib', 6), ('Answer.dSYM', 10)],
+            '0000000000001234 S _native_answer\n')
+        self.assertIn('expected exactly one',error)
+        self.assertIsNone(record)
+        receipts=[json.loads(line.split(' ',1)[1]) for line in self.last_output.splitlines()
+                  if line.startswith('NATIVE_EXPORT_BYTES_')]
+        manifest,chunk=receipts
+        data=base64.b64decode(chunk['data'],validate=True)
+        self.assertEqual(data,struct.pack('<IIII',0xfeedfacf,0x0100000c,0,6)+bytes(16))
+        self.assertEqual(manifest['path'],'Answer.dylib')
+        self.assertEqual(manifest['sha256'],hashlib.sha256(data).hexdigest())
+        self.assertEqual(manifest['size'],len(data))
+        self.assertEqual(chunk['sha256'],manifest['sha256'])
+        self.assertFalse(manifest['nativeSuccessClaimed'])
+
+    def test_success_and_unrelated_symbols_do_not_transport_bytes(self):
+        self.execute([('Answer.dylib',6)])
+        self.assertNotIn('NATIVE_EXPORT_BYTES_',self.last_output)
+        self.execute([('Answer.dylib',6)],'00001234 S _unrelated\n')
+        self.assertNotIn('NATIVE_EXPORT_BYTES_',self.last_output)
+        self.execute([('foreign.dylib',6)],'00001234 S _native_answer\n')
+        self.assertNotIn('NATIVE_EXPORT_BYTES_',self.last_output)
+
+    def test_oversized_candidate_is_not_buffered_for_transport(self):
+        error,_,diagnostics,_=self.execute([('Answer.dylib',6)],
+            '00001234 S _native_answer\n',extra_bytes=bytes(2*1024*1024))
+        self.assertIn('expected exactly one',error)
+        self.assertNotIn('NATIVE_EXPORT_BYTES_MANIFEST',self.last_output)
+        self.assertEqual(diagnostics[0]['candidates'][0]['candidateBytesSkipped'],'candidate byte bound')
+
+    def test_transport_error_does_not_replace_cardinality_failure(self):
+        with patch('base64.b64encode',side_effect=ValueError('stand-in encoder failure')):
+            error,_,diagnostics,record=self.execute([('Answer.dylib',6)],'00001234 S _native_answer\n')
+        self.assertIn('expected exactly one',error)
+        self.assertIsNone(record)
+        self.assertEqual(diagnostics[0]['candidateByteRetentionError'],'ValueError')
+
+    def test_byte_transport_bounds_and_chunk_roundtrip(self):
+        import ast
+        tree=ast.parse(VERIFY.read_text())
+        function=next(node for node in tree.body if isinstance(node,ast.FunctionDef)
+                      and node.name=='retain_failed_candidates')
+        scope=dict(base64=base64,hashlib=hashlib,json=json)
+        exec(compile(ast.Module(body=[function],type_ignores=[]),str(VERIFY),'exec'),scope)
+        output=io.StringIO()
+        data=b'x'*(2*1024*1024)
+        with contextlib.redirect_stdout(output):
+            scope['retain_failed_candidates']([('first.dylib',data),('second.dylib',data),('third.dylib',data)])
+        rows=[json.loads(line.split(' ',1)[1]) for line in output.getvalue().splitlines()]
+        manifests=[row for row in rows if 'chunks' in row]
+        self.assertEqual([row['path'] for row in manifests],['first.dylib','second.dylib'])
+        self.assertTrue(all(row['chunks']==64 for row in manifests))
+        chunks=[row for row in rows if 'data' in row]
+        self.assertTrue(all(len(base64.b64decode(row['data']))==32768 for row in chunks))
+        self.assertEqual(b''.join(base64.b64decode(row['data']) for row in chunks[:64]),data)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            scope['retain_failed_candidates']([('oversized.dylib',data+b'x')])
+        self.assertNotIn('NATIVE_EXPORT_BYTES_CHUNK',output.getvalue())
+        self.assertIn('candidate byte bound',output.getvalue())
 
     def test_actual_verifier_still_accepts_one_owned_library(self):
         error, calls, diagnostics, record = self.execute([('Answer.dylib', 6), ('Answer.dSYM', 10)])

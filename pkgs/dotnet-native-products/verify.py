@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Bind owned managed PE export metadata to an actual native shared library."""
+import base64
 import hashlib
 import json
 import re
@@ -8,6 +9,29 @@ import shutil
 import struct
 import subprocess
 import sys
+
+def retain_failed_candidates(candidates):
+    """Failure-only data receipt; never executes bytes or changes export acceptance.
+
+    Failed Nix outputs may be removed. Full build logs retain this bounded
+    transport independently of output realization. Decode only as inert data.
+    """
+    remaining=4*1024*1024
+    for relative,data in candidates[:2]:
+        if len(data)>2*1024*1024 or len(data)>remaining:
+            print('NATIVE_EXPORT_BYTES_SKIPPED '+json.dumps({'path':relative,
+                'size':len(data),'reason':'candidate byte bound'}),flush=True)
+            continue
+        remaining-=len(data)
+        digest=hashlib.sha256(data).hexdigest()
+        chunks=(len(data)+32767)//32768
+        print('NATIVE_EXPORT_BYTES_MANIFEST '+json.dumps({'path':relative,
+            'size':len(data),'sha256':digest,'chunks':chunks,'encoding':'base64',
+            'nativeSuccessClaimed':False},separators=(',',':')),flush=True)
+        for index in range(chunks):
+            print('NATIVE_EXPORT_BYTES_CHUNK '+json.dumps({'sha256':digest,'index':index,
+                'data':base64.b64encode(data[index*32768:(index+1)*32768]).decode('ascii')},
+                separators=(',',':')),flush=True)
 
 def section_diagnostics(data):
     """Observe Mach-O sections; malformed/large metadata never becomes acceptance."""
@@ -51,6 +75,7 @@ for name in spec['exports']:
 
 matches=[]
 diagnostics=[]
+failed_candidates=[]
 diagnostic_files=0
 for path in published.rglob('*'):
     if not path.is_file(): continue
@@ -78,6 +103,15 @@ for path in published.rglob('*'):
         assert spec['system']=='aarch64-darwin' and cpu==0x0100000c, 'native Mach-O target does not match selected system'
         result=subprocess.run(['nm','-gU',str(path)],check=True,capture_output=True,text=True)
         symbols={line.split()[-1].removeprefix('_') for line in result.stdout.splitlines() if len(line.split())>=3 and line.split()[-2] in ('T','W')}
+        # Retain only declared-export-bearing produced arm64 dylibs on failure.
+        observed={line.split()[-1].removeprefix('_') for line in result.stdout.splitlines()
+                  if len(line.split())==3 and line.split()[-2] in ('T','W','S')}
+        if (path.name==spec['assembly']+'.dylib' and not path.is_symlink()
+                and set(spec['exports']) & observed and len(failed_candidates)<2):
+            if len(data)<=2*1024*1024 and sum(len(value) for _,value in failed_candidates)+len(data)<=4*1024*1024:
+                failed_candidates.append((str(path.relative_to(published)),data))
+            else:
+                diagnostic['candidateBytesSkipped']='candidate byte bound'
     else: continue
     diagnostic.update(nmArgv=result.args, nmExitCode=result.returncode,
         nmStdout=result.stdout[:32768], nmStderr=result.stderr[:4096],
@@ -86,6 +120,13 @@ for path in published.rglob('*'):
         selectedExportsMissing=sorted(set(spec['exports']) - symbols))
     if set(spec['exports'])<=symbols: matches.append((path,symbols))
 if len(matches)!=1:
+    retention_error=None
+    try:
+        retain_failed_candidates(failed_candidates)
+    except Exception as error:
+        # Retention must never turn a failed cardinality check into success.
+        # Do not let a best-effort transport error replace that original gate.
+        retention_error=type(error).__name__
     # Report observations without changing candidate, architecture or export gates.
     provider={'selected':shutil.which('nm')}
     if provider['selected']:
@@ -103,7 +144,8 @@ if len(matches)!=1:
         'expectedExports':spec['exports'], 'matchingLibraries':len(matches),
         'filesSeen':diagnostic_files, 'filesRetained':len(diagnostics),
         'filesOmitted':diagnostic_files-len(diagnostics),
-        'nmProvider':provider, 'candidates':diagnostics},separators=(',',':')),flush=True)
+        'nmProvider':provider, 'candidates':diagnostics,
+        'candidateByteRetentionError':retention_error},separators=(',',':')),flush=True)
 assert len(matches)==1, 'expected exactly one native library defining all selected owned exports'
 selected,symbols=matches[0]
 (out/'lib').mkdir(parents=True,exist_ok=True)
