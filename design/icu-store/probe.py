@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Private native diagnostic; never modifies the packaged App or its runtime."""
+"""Bounded native diagnostic; never modifies the packaged App or its runtime."""
 import argparse
 import hashlib
 import importlib.util

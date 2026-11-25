@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Private, deliberately unregistered diagnostic. The caller must supply the
+# Bounded observational diagnostic. The caller must supply the
 # exact current App and its selected runtime, not a replacement SDK/runtime.
 {
   pkgs,

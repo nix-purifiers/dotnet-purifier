@@ -72,6 +72,13 @@ class Controller(unittest.TestCase):
         self.assertEqual(result['stopReason'], 'monitor-error')
         self.assertIn('sampler denied', result['monitorError'])
 
+    def test_zero_rss_for_live_helper_is_not_accepted_as_monitoring(self):
+        def unavailable(ps, group, *args):
+            return [{'pid': group, 'parent': os.getpid(), 'group': group, 'rssBytes': 0}]
+        result = self.call('import time;time.sleep(5)', sampler=unavailable)
+        self.assertEqual(result['stopReason'], 'monitor-error')
+        self.assertIn('RSS unavailable', result['monitorError'])
+
     def test_deadline_kills_owned_descendant_and_preserves_unrelated_process(self):
         sentinel = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(10)'])
         try:

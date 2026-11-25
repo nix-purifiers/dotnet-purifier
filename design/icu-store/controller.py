@@ -100,7 +100,9 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
                     if now >= next_sample:
                         rows = sampler(ps, child.pid, bounded_run, work, env)
                         if child.poll() is None:
-                            assert any(row['pid'] == child.pid for row in rows), 'owned helper absent from ps'
+                            own = [row for row in rows if row['pid'] == child.pid]
+                            assert len(own) == 1, 'owned helper absent from ps'
+                            assert own[0]['rssBytes'] > 0, 'owned live helper RSS unavailable'
                         size = scratch_size([root] + ([] if out.is_relative_to(root) else [out]))
                         rss = sum(row['rssBytes'] for row in rows)
                         receipt['samples'] += 1
