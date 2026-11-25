@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import selectors
 import signal
 import stat
@@ -67,6 +68,38 @@ def sample(ps, group, bounded_run, cwd, env):
         raise SampleError(str(error), diagnostic) from error
 
 
+def sample_owned(helper, group, bounded_run, cwd, env, *, site, version):
+    row=bounded_run([sys.executable,str(helper),'--site',str(site),'--version',version,
+                     '--group',str(group)],cwd,env,timeout=1,limit=262144,separate_stderr=True)
+    diagnostic=dict(argv=row['argv'],exitCode=row['exitCode'],stopReason=row['stopReason'],
+                    stderr=row['stderr'][:4096],stderrTruncated=len(row['stderr'])>4096,
+                    stdoutRetained=False,timeoutSeconds=1,combinedOutputLimitBytes=262144)
+    if row['exitCode']!=0 or row['stopReason'] is not None:
+        raise SampleError('owned resource sampler unavailable or bounded out',diagnostic)
+    try:
+        value=json.loads(row['output'])
+        assert set(value)=={'rows','provider'}
+        assert isinstance(value['rows'],list) and isinstance(value['provider'],dict)
+        provider=value['provider']
+        assert set(provider)=={'version','module','extension','pythonExecutable'}
+        assert provider['version']==version and provider['pythonExecutable']==sys.executable
+        for key in ('module','extension'):
+            identity=provider[key]
+            assert set(identity)=={'path','sha256'}
+            path=Path(identity['path'])
+            assert path.is_absolute() and '..' not in path.parts and path.is_relative_to(site)
+            assert re.fullmatch('[0-9a-f]{64}',identity['sha256'])
+        seen=set()
+        for item in value['rows']:
+            assert set(item)=={'pid','parent','group','rssBytes'}
+            assert all(type(number) is int and number>=0 for number in item.values())
+            assert item['pid']>0 and item['group']==group and item['pid'] not in seen
+            seen.add(item['pid'])
+        return value
+    except (AssertionError,ValueError,TypeError,KeyError) as error:
+        raise SampleError('unexpected owned resource sampler format',diagnostic) from error
+
+
 def kill_group(group):
     try:
         os.killpg(group, signal.SIGKILL)
@@ -76,7 +109,8 @@ def kill_group(group):
 
 def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
             scratch_limit=134217728, rss_limit=2147483648, process_limit=8,
-            interval=0.2, sampler=sample, scratch_parent=None, ps_version=None):
+            interval=0.2, sampler=sample, scratch_parent=None, ps_version=None,
+            provider_key='psProvider'):
     started = time.monotonic()
     receipt = dict(command=command, limits=dict(deadlineSeconds=deadline, outputBytes=output_limit,
                    scratchBytes=scratch_limit, rssBytes=rss_limit, processes=process_limit,
@@ -88,7 +122,7 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
     with provider.open('rb') as file:
         data = file.read(16 * 1024**2 + 1)
     assert len(data) <= 16 * 1024**2, 'ps provider size bound'
-    receipt['psProvider'] = dict(selected=ps, resolved=str(provider),
+    receipt[provider_key] = dict(selected=ps, resolved=str(provider),
                                  sha256=hashlib.sha256(data).hexdigest(),
                                  declaredPackageVersion=ps_version)
     output = bytearray()
@@ -115,6 +149,10 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
                         break
                     if now >= next_sample:
                         rows = sampler(ps, child.pid, bounded_run, work, env)
+                        if isinstance(rows,dict):
+                            provider=rows['provider']
+                            assert receipt.setdefault('resourceSamplerModule',provider)==provider, 'resource sampler provider changed'
+                            rows=rows['rows']
                         if child.poll() is None:
                             own = [row for row in rows if row['pid'] == child.pid]
                             assert len(own) == 1, 'owned helper absent from ps'
@@ -175,7 +213,10 @@ def execute(command, ps, out, bounded_run, *, deadline=120, output_limit=524288,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--ps', required=True)
+    providers=parser.add_mutually_exclusive_group(required=True)
+    providers.add_argument('--ps')
+    providers.add_argument('--owned-sampler',type=Path)
+    parser.add_argument('--psutil-site',type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--ps-version', required=True)
     parser.add_argument('--probe-helper', type=Path, required=True)
@@ -186,5 +227,13 @@ if __name__ == '__main__':
     spec.loader.exec_module(probe)
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     assert command, 'diagnostic command required'
-    receipt = execute(command, args.ps, args.out, probe.run, ps_version=args.ps_version)
+    if args.owned_sampler is not None:
+        assert args.psutil_site is not None, 'declared resource module site required'
+        def selected_sampler(helper,group,bounded_run,cwd,env):
+            return sample_owned(helper,group,bounded_run,cwd,env,site=args.psutil_site,version=args.ps_version)
+        receipt=execute(command,str(args.owned_sampler),args.out,probe.run,
+                        sampler=selected_sampler,ps_version=args.ps_version,
+                        provider_key='resourceSamplerHelper')
+    else:
+        receipt = execute(command, args.ps, args.out, probe.run, ps_version=args.ps_version)
     sys.exit(0 if receipt['success'] else 1)

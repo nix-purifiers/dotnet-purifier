@@ -13,12 +13,13 @@ pkgs.runCommand "dotnet-current-icu-store-probe"
     # No propagated runtime/SDK sandbox profile or local-network permission.
     nativeLinkPrerequisites = [
       pkgs.darwin.ICU
-      pkgs.darwin.adv_cmds.ps
+      pkgs.python3Packages.psutil
     ];
   }
   ''
-    python3 ${./controller.py} --ps ${pkgs.darwin.adv_cmds.ps}/bin/ps \
-      --ps-version ${pkgs.lib.escapeShellArg pkgs.darwin.adv_cmds.version} \
+    python3 ${./controller.py} --owned-sampler ${./resource-sampler.py} \
+      --psutil-site ${pkgs.python3Packages.psutil}/${pkgs.python3.sitePackages} \
+      --ps-version ${pkgs.lib.escapeShellArg pkgs.python3Packages.psutil.version} \
       --out "$out" --probe-helper ${./probe.py} -- \
       python3 ${./probe.py} \
       --app ${app}/lib/App --dotnet ${pkgs.lib.getExe' runtime "dotnet"} \

@@ -111,11 +111,23 @@ class Controller(unittest.TestCase):
         self.assertEqual(result['monitorSample']['stopReason'], 'output-limit')
 
     def test_zero_rss_for_live_helper_is_not_accepted_as_monitoring(self):
-        def unavailable(ps, group, *args):
-            return [{'pid': group, 'parent': os.getpid(), 'group': group, 'rssBytes': 0}]
-        result = self.call('import time;time.sleep(5)', sampler=unavailable)
-        self.assertEqual(result['stopReason'], 'monitor-error')
-        self.assertIn('RSS unavailable', result['monitorError'])
+        for owned_json in (False,True):
+            with self.subTest(owned_json=owned_json):
+                def unavailable(ps, group, *args):
+                    rows=[{'pid': group, 'parent': os.getpid(), 'group': group, 'rssBytes': 0}]
+                    return dict(rows=rows,provider={'identity':'stand-in'}) if owned_json else rows
+                result = self.call('import time;time.sleep(5)', sampler=unavailable)
+                self.assertEqual(result['stopReason'], 'monitor-error')
+                self.assertIn('RSS unavailable', result['monitorError'])
+
+    def test_owned_json_sampler_keeps_outer_rss_limit(self):
+        def excessive(ps,group,*args):
+            return dict(rows=[dict(pid=group,parent=os.getpid(),group=group,rssBytes=2048)],
+                        provider={'identity':'stand-in'})
+        result=self.call('import time;time.sleep(5)',sampler=excessive,rss_limit=1024)
+        self.assertEqual(result['stopReason'],'rss-limit')
+        self.assertFalse(result['success'])
+        self.assertEqual(result['resourceSamplerModule'],{'identity':'stand-in'})
 
     def test_deadline_kills_owned_descendant_and_preserves_unrelated_process(self):
         sentinel = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(10)'])
