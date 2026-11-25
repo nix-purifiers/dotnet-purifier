@@ -1,8 +1,12 @@
 # Private Darwin ICU store diagnostic
 
-This source is deliberately absent from `checks`, workflows and product wrappers.
-It has not executed a Darwin runtime. The original `current-app-runs` check and
-all public source, sandbox, network and artifact contracts remain unchanged.
+This candidate registers `current-icu-store-diagnostic` only in Darwin checks.
+It has not executed a Darwin runtime. The original `current-app-runs` and all
+other mandatory checks remain present. Product wrappers, SDK selection, sandbox
+profiles and network permissions do not change. The cache-only preflight includes
+both the selected ICU output and declared Apple `ps`. An always-run read-only
+retainer copies already-realized diagnostic JSON and local NAR metadata without
+building or replaying any check when flake-check fails.
 
 `probe.nix` takes the existing pure current App and the exact runtime selected by
 that App's builder. It does not select another SDK/runtime. Four private copies
@@ -43,7 +47,7 @@ there is no process-wide file-size, virtual-memory, GC or globalization-mode
 limit. Local Python tests exercise guard failures and owned descendant cleanup;
 actual Darwin sampler behavior, cache trust and runtime results remain unproven.
 
-Before registration/execution, independently review the frozen source and exact
+Before publication/native execution, independently review the frozen source and exact
 Darwin evaluation, enforce the existing cache-only guard for the selected ICU
 output closure plus the exact declared Apple `ps` output, and obtain the manager's native CI authorization. No local native
 run, new host/profile access, SDK/default activation or source toolchain build is

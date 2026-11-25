@@ -27,7 +27,8 @@ def ensure(repo, out):
           project = "Answer"; exports = [ "native_answer" "native_collections" ];
         };
       };
-    in b.nativePackages.answer.nativeLinkPrerequisites'''
+    in p.lib.unique (b.nativePackages.answer.nativeLinkPrerequisites ++
+      (f.checks.${builtins.currentSystem}.current-icu-store-diagnostic.nativeLinkPrerequisites or []))'''
     evaluate = ['nix', 'eval', '--impure', '--json', '--option',
                 'allow-import-from-derivation', 'false', '--expr',
                 'map toString (' + expression + ')']

@@ -210,6 +210,7 @@ in
             }
           )
         );
+        DOTNET_PURIFIER_ICU_RETAINER = ./native/retain-icu-probe.py;
         DOTNET_PURIFIER_NATIVE_LINK_CONTEXT = ../pkgs/dotnet-native-products/link-context.py;
         DOTNET_PURIFIER_RUNTIME_IDENTITY_HELPER = ./runtime-identity.py;
         DOTNET_PURIFIER_BROWSER_RESOLVER = ./browser/resolve.py;
@@ -254,6 +255,14 @@ in
 
   current-app = current.packages.App;
   current-app11 = current.packages.App11;
+  # Observational only: the original App success checks below stay mandatory.
+  ${if pkgs.stdenv.hostPlatform.isDarwin then "current-icu-store-diagnostic" else null} =
+    import ../design/icu-store/probe.nix
+      {
+        inherit pkgs;
+        app = current.packages.App;
+        runtime = currentToolchain.runtime_10_0;
+      };
   current-app-runs =
     prints "current-app-runs" "${current.packages.App}/bin/App"
       ''{"runtime":"10.0.15","value":"locked"}'';
