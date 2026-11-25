@@ -212,6 +212,7 @@ in
         );
         DOTNET_PURIFIER_ICU_RETAINER = ./native/retain-icu-probe.py;
         DOTNET_PURIFIER_NATIVE_LINK_CONTEXT = ../pkgs/dotnet-native-products/link-context.py;
+        DOTNET_PURIFIER_NATIVE_VERIFY = ../pkgs/dotnet-native-products/verify.py;
         DOTNET_PURIFIER_RUNTIME_IDENTITY_HELPER = ./runtime-identity.py;
         DOTNET_PURIFIER_BROWSER_RESOLVER = ./browser/resolve.py;
         DOTNET_PURIFIER_NATIVE_CACHE_HELPER = ./native/cache_prerequisites.py;

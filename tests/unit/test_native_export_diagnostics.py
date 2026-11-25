@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -14,10 +15,21 @@ import unittest
 from unittest.mock import patch
 
 
-VERIFY = Path(__file__).resolve().parents[2] / 'pkgs/dotnet-native-products/verify.py'
+VERIFY = Path(os.environ.get('DOTNET_PURIFIER_NATIVE_VERIFY',
+              Path(__file__).resolve().parents[2] / 'pkgs/dotnet-native-products/verify.py'))
 
 
 class NativeExportDiagnostics(unittest.TestCase):
+    def test_detached_unit_directory_uses_explicit_verifier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            copied = Path(tmp) / 'test_diagnostics.py'
+            shutil.copyfile(__file__, copied)
+            result = subprocess.run([os.sys.executable, '-B', str(copied),
+                'NativeExportDiagnostics.test_actual_verifier_still_accepts_one_owned_library', '-v'],
+                env=dict(os.environ, DOTNET_PURIFIER_NATIVE_VERIFY=str(VERIFY)),
+                cwd=tmp, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+
     def execute(self, rows, nm_stdout='0000000000001234 T _native_answer\n'):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
