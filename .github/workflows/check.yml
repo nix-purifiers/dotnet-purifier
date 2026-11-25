@@ -24,6 +24,27 @@ jobs:
       - name: Require cached native linker prerequisites
         if: runner.os == 'macOS'
         run: python3 tests/native/cache_prerequisites.py --repo "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/native-link-prerequisites"
+      # Save the bounded observational check before a long mandatory suite can
+      # consume the job deadline. The same registered check remains mandatory
+      # in flake check; a successful output is reused, never rebuilt here.
+      - name: Observe ICU before the full suite
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: nix build --no-link --print-out-paths -L --max-jobs 2 --option sandbox relaxed --option allow-import-from-derivation false .#checks.aarch64-darwin.current-icu-store-diagnostic
+      - name: Retain early ICU diagnostic without building or replaying
+        if: always() && runner.os == 'macOS'
+        continue-on-error: true
+        timeout-minutes: 2
+        run: python3 tests/native/retain-icu-probe.py --repo "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/early-icu-store-diagnostic"
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        continue-on-error: true
+        timeout-minutes: 2
+        with:
+          name: early-current-icu-store-diagnostic-${{ matrix.runner }}
+          path: ${{ runner.temp }}/early-icu-store-diagnostic
+          if-no-files-found: error
       - name: Check all outputs in the Nix sandbox
         run: |
           sandbox=true
