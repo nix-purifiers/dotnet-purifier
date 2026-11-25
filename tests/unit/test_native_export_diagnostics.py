@@ -30,12 +30,17 @@ class NativeExportDiagnostics(unittest.TestCase):
                 cwd=tmp, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
 
-    def execute(self, rows, nm_stdout='0000000000001234 T _native_answer\n'):
+    def execute(self, rows, nm_stdout='0000000000001234 T _native_answer\n', section_flags=None):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             published = root / 'publish'; published.mkdir()
             for name, kind in rows:
-                (published / name).write_bytes(struct.pack('<IIII', 0xfeedfacf, 0x0100000c, 0, kind) + bytes(16))
+                data = struct.pack('<IIII', 0xfeedfacf, 0x0100000c, 0, kind) + bytes(16)
+                if section_flags is not None:
+                    data = struct.pack('<IIIIIIII', 0xfeedfacf, 0x0100000c, 0, kind, 1, 152, 0, 0)
+                    data += struct.pack('<II16sQQQQiiII', 0x19, 152, b'__TEXT', 0x1000, 0x1000, 0, 0, 5, 5, 1, 0)
+                    data += struct.pack('<16s16sQQIIIIIIII', b'__managedcode', b'__TEXT', 0x1234, 0x40, 0, 2, 0, 0, section_flags, 0, 0, 0)
+                (published / name).write_bytes(data)
             assembly = root / 'Answer.dll'; assembly.write_bytes(b'stand-in managed compiler input')
             (root / 'Answer.ilc.rsp').write_text('stand-in response graph')
             spec = dict(assembly='Answer', exports=['native_answer'], system='aarch64-darwin', library='libanswer.dylib', name='answer')
@@ -100,6 +105,29 @@ class NativeExportDiagnostics(unittest.TestCase):
         row = diagnostics[0]['candidates'][0]
         self.assertEqual(len(row['nmStdout']), 32768)
         self.assertTrue(row['nmStdoutTruncated'])
+
+    def test_section_observation_distinguishes_code_flags_without_accepting_s(self):
+        for flags in (0x80000400, 0):
+            with self.subTest(flags=flags):
+                error, _, diagnostics, record = self.execute([('Answer.dylib', 6)],
+                    '0000000000001234 S _native_answer\n', section_flags=flags)
+                self.assertIn('expected exactly one', error)
+                self.assertIsNone(record)
+                section = diagnostics[0]['candidates'][0]['sections'][0]
+                self.assertEqual(section, dict(name='__managedcode', segment='__TEXT',
+                    address=0x1234, size=0x40, flags=flags, segmentInitialProtection=5))
+
+    def test_section_metadata_bounds_are_diagnostic_only(self):
+        # Run the actual helper definition without the verifier's CLI entry.
+        import ast
+        tree = ast.parse(VERIFY.read_text())
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name=='section_diagnostics')
+        scope = {'struct':struct}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(VERIFY), 'exec'), scope)
+        read = scope['section_diagnostics']
+        self.assertIn('inspectionError', read(bytes(4)))
+        header = bytearray(32); struct.pack_into('<II', header, 16, 257, 0)
+        self.assertIn('inspectionError', read(header))
 
 
 if __name__ == '__main__':

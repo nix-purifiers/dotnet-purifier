@@ -9,6 +9,35 @@ import struct
 import subprocess
 import sys
 
+def section_diagnostics(data):
+    """Observe Mach-O sections; malformed/large metadata never becomes acceptance."""
+    try:
+        count,size=struct.unpack_from('<II',data,16)
+        if count>256 or size>1024*1024 or 32+size>len(data):
+            return {'inspectionError':'load-command diagnostic bound'}
+        offset=32; sections=[]
+        for _ in range(count):
+            command,length=struct.unpack_from('<II',data,offset)
+            if length<8 or offset+length>32+size:
+                return {'inspectionError':'invalid load-command bounds'}
+            if command==0x19:
+                if length<72: return {'inspectionError':'short segment command'}
+                nsections=struct.unpack_from('<I',data,offset+64)[0]
+                if 72+nsections*80>length or len(sections)+nsections>256:
+                    return {'inspectionError':'section diagnostic bound'}
+                protection=struct.unpack_from('<I',data,offset+60)[0]
+                for index in range(nsections):
+                    row=offset+72+index*80
+                    name,segment,address,size_bytes=struct.unpack_from('<16s16sQQ',data,row)
+                    flags=struct.unpack_from('<I',data,row+64)[0]
+                    sections.append({'name':name.split(b'\0')[0].decode('ascii',errors='replace'),
+                        'segment':segment.split(b'\0')[0].decode('ascii',errors='replace'),
+                        'address':address,'size':size_bytes,'flags':flags,'segmentInitialProtection':protection})
+            offset+=length
+        return {'sections':sections}
+    except struct.error:
+        return {'inspectionError':'truncated section metadata'}
+
 spec=json.loads(Path(sys.argv[1]).read_text())
 published=Path(sys.argv[2]).resolve(strict=True)
 metadata=json.loads(Path(sys.argv[3]).read_text())
@@ -26,7 +55,8 @@ diagnostic_files=0
 for path in published.rglob('*'):
     if not path.is_file(): continue
     assert path.resolve().is_relative_to(published), 'native publish symlink escapes output'
-    magic=path.read_bytes()[:32]
+    data=path.read_bytes()
+    magic=data[:32]
     diagnostic_files+=1
     diagnostic={'path':str(path.relative_to(published)), 'magic':magic[:8].hex(),
                 'size':path.stat().st_size}
@@ -43,6 +73,7 @@ for path in published.rglob('*'):
     elif magic[:4]==b'\xcf\xfa\xed\xfe':
         cpu,subtype,kind=struct.unpack_from('<III',magic,4)
         diagnostic.update(format='Mach-O',kind=kind,cpu=cpu)
+        diagnostic.update(section_diagnostics(data))
         if kind!=6: continue
         assert spec['system']=='aarch64-darwin' and cpu==0x0100000c, 'native Mach-O target does not match selected system'
         result=subprocess.run(['nm','-gU',str(path)],check=True,capture_output=True,text=True)
